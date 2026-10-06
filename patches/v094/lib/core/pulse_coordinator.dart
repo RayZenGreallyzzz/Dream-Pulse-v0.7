@@ -142,6 +142,10 @@ class PulseCoordinator extends ChangeNotifier {
         yield chunk;
       }
 
+      if (brain.lastBackend == brain.local.name && brain.local.stopRequested) {
+        throw StateError('GENERATION_CANCELLED');
+      }
+
       final answer = ResponseSanitizer.finalOnly(answerBuffer.toString());
       if (answer.isEmpty) {
         throw StateError('Модель не сформировала финальный ответ');
