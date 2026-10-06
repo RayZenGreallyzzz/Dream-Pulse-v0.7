@@ -10,8 +10,9 @@ class QwenModelInstaller extends ChangeNotifier {
   static const expectedSha256 =
       '1741e5b2d062b07acf048bf0d2c514dadf2a48f94e2b4aa0cfe069af3838ee2f';
   static const downloadUrl =
-      'https://huggingface.co/bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf';
-  static const minExpectedBytes = 1000000000;
+      'https://huggingface.co/bartowski/DeepSeek-R1-Distill-Qwen-1.5B-GGUF/resolve/main/DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf?download=true';
+  static const minExpectedBytes = 1050000000;
+  static const maxExpectedBytes = 1200000000;
 
   // FAST brain (kept as fallback if already installed)
   static const fastFileName = 'Qwen3-0.6B-Q4_0.gguf';
@@ -52,7 +53,7 @@ class QwenModelInstaller extends ChangeNotifier {
     final smart = File(smartPath);
     if (await smart.exists()) {
       final length = await smart.length();
-      if (length >= minExpectedBytes) {
+      if (length >= minExpectedBytes && length <= maxExpectedBytes) {
         if (!verifyHash ||
             (await sha256.bind(smart.openRead()).first).toString() == expectedSha256) {
           return smartPath;
@@ -120,12 +121,18 @@ class QwenModelInstaller extends ChangeNotifier {
     }
 
     final part = File('$smartPath.part');
-    if (await part.exists()) await part.delete();
+    var offset = await part.exists() ? await part.length() : 0;
+    if (offset > maxExpectedBytes) {
+      await part.delete();
+      offset = 0;
+    }
 
     downloading = true;
     installed = false;
     progress = 0;
-    status = 'CONNECTING TO DEEPSEEK 1.5B...';
+    status = offset > 0
+        ? 'RESUMING DEEPSEEK 1.5B...'
+        : 'CONNECTING TO DEEPSEEK 1.5B...';
     notifyListeners();
 
     final client = HttpClient()..connectionTimeout = const Duration(seconds: 30);
@@ -136,15 +143,32 @@ class QwenModelInstaller extends ChangeNotifier {
       request
         ..followRedirects = true
         ..maxRedirects = 10;
-      request.headers.set(HttpHeaders.userAgentHeader, 'DreamPulse/0.9.7 Android');
+      request.headers.set(
+        HttpHeaders.userAgentHeader,
+        'DreamPulse/0.9.7 Android',
+      );
+      if (offset > 0) {
+        request.headers.set(HttpHeaders.rangeHeader, 'bytes=$offset-');
+      }
+
       final response = await request.close();
-      if (response.statusCode != HttpStatus.ok) {
+      if (response.statusCode != HttpStatus.ok &&
+          response.statusCode != HttpStatus.partialContent) {
         throw HttpException('HTTP ${response.statusCode} при загрузке DeepSeek');
       }
 
-      final total = response.contentLength > 0 ? response.contentLength : 1120000000;
-      var received = 0;
-      sink = part.openWrite();
+      if (offset > 0 && response.statusCode == HttpStatus.ok) {
+        await part.delete();
+        offset = 0;
+      }
+
+      final total = response.contentLength > 0
+          ? offset + response.contentLength
+          : maxExpectedBytes;
+      var received = offset;
+      sink = part.openWrite(
+        mode: offset > 0 ? FileMode.append : FileMode.write,
+      );
       await for (final chunk in response) {
         sink.add(chunk);
         received += chunk.length;
@@ -158,7 +182,11 @@ class QwenModelInstaller extends ChangeNotifier {
 
       final length = await part.length();
       if (length < minExpectedBytes) {
-        throw StateError('Файл модели слишком мал: $length байт');
+        throw StateError('Загрузка DeepSeek не завершена: $length байт');
+      }
+      if (length > maxExpectedBytes) {
+        await part.delete();
+        throw StateError('Файл DeepSeek имеет неверный размер: $length байт');
       }
 
       downloading = false;
@@ -169,6 +197,7 @@ class QwenModelInstaller extends ChangeNotifier {
 
       final digest = await sha256.bind(part.openRead()).first;
       if (digest.toString() != expectedSha256) {
+        await part.delete();
         throw StateError('SHA-256 DeepSeek 1.5B не совпал');
       }
 
@@ -181,7 +210,8 @@ class QwenModelInstaller extends ChangeNotifier {
       status = 'LOCAL BRAIN READY · DeepSeek R1 1.5B SMART';
       return smartPath;
     } catch (e) {
-      if (await part.exists()) await part.delete();
+      // Keep a valid partial file so the next attempt can resume.
+      // Bad-size/hash files are deleted at validation above.
       // Keep the old FAST brain usable after a failed SMART download.
       final fallback = await installedPathIfValid();
       modelPath = fallback;
@@ -205,7 +235,7 @@ class QwenModelInstaller extends ChangeNotifier {
 
   void cancel() {
     _client?.close(force: true);
-    status = 'DOWNLOAD CANCELLED';
+    status = 'DOWNLOAD PAUSED';
     notifyListeners();
   }
 }
