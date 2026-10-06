@@ -43,6 +43,7 @@ jobs:
           python3 patches/v08/patch.py
           grep -q "version: 0.8.0+8" pubspec.yaml
           grep -q "Qwen3-1.7B-Q4_K_M.gguf" lib/llm/qwen_model_installer.dart
+          rm -rf patches/v08
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
