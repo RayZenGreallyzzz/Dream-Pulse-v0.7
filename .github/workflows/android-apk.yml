@@ -77,6 +77,15 @@ jobs:
               raise SystemExit('Expected FilePicker block not found')
           s = s.replace(old, new)
           p.write_text(s)
+
+          p = Path('lib/ui/avatar_page.dart')
+          s = p.read_text()
+          old = """    final result = await FilePicker.pickFiles(\n      type: FileType.custom,\n      allowedExtensions: const ['glb'],\n      withData: true,\n    );\n    if (result == null || result.files.isEmpty) return;\n    final file = result.files.first;"""
+          new = """    final file = await FilePicker.pickFile(\n      type: FileType.custom,\n      allowedExtensions: const ['glb'],\n    );\n    if (file == null) return;"""
+          if old not in s:
+              raise SystemExit('Expected avatar FilePicker block not found')
+          s = s.replace(old, new)
+          p.write_text(s)
           PY
 
       - name: Set up Java 17
