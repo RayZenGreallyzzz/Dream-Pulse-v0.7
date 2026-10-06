@@ -23,12 +23,15 @@ class LocalQwenBackend extends ChangeNotifier implements BrainBackend {
   bool loading = false;
   bool generating = false;
   bool _stopRequested = false;
-  String systemContext = '';
 
   bool get stopRequested => _stopRequested;
 
+  bool get smartModel => modelPath?.contains('DeepSeek-R1') ?? false;
+
+  String get modelLabel => smartModel ? 'DeepSeek R1 1.5B' : 'Qwen3 0.6B';
+
   @override
-  String get name => 'Qwen3 0.6B Local';
+  String get name => smartModel ? 'DeepSeek R1 1.5B SMART' : 'Qwen3 0.6B FAST';
 
   @override
   bool get ready => modelPath != null && !loading;
@@ -46,21 +49,21 @@ class LocalQwenBackend extends ChangeNotifier implements BrainBackend {
       final gpu = await _controller.detectGpu();
       freeRamMb = gpu.freeRamBytes > 0 ? gpu.freeRamBytes ~/ (1024 * 1024) : 0;
 
-      // FAST tablet profile: Qwen 0.6B is tiny enough to prefer CPU throughput
-      // over an oversized context. Four threads are a good balance for older
-      // 8-core Android SoCs without starving Flutter/UI.
-      contextSize = 1024;
+      final loadingSmart = path.contains('DeepSeek-R1');
+      contextSize = loadingSmart ? 768 : 1024;
       final cpu = Platform.numberOfProcessors;
       threads = cpu >= 4 ? 4 : (cpu >= 2 ? 2 : 1);
       gpuLayers = 0;
 
       progressSub = _controller.loadProgress.listen((value) {
         loadProgress = value.clamp(0.0, 1.0);
-        status = 'Загрузка Qwen 0.6B ${(loadProgress * 100).round()}%';
+        final label = path.contains('DeepSeek-R1') ? 'DeepSeek 1.5B' : 'Qwen 0.6B';
+        status = 'Загрузка $label ${(loadProgress * 100).round()}%';
         notifyListeners();
       });
 
-      status = 'Загружаю Qwen3 0.6B · CPU...';
+      final loadingLabel = path.contains('DeepSeek-R1') ? 'DeepSeek R1 1.5B' : 'Qwen3 0.6B';
+      status = 'Загружаю $loadingLabel · CPU...';
       notifyListeners();
       await _controller.loadModel(
         modelPath: path,
@@ -70,14 +73,14 @@ class LocalQwenBackend extends ChangeNotifier implements BrainBackend {
       );
 
       final loaded = await _controller.isModelLoaded();
-      if (!loaded) throw StateError('llama.cpp не подтвердил загрузку Qwen 0.6B');
+      if (!loaded) throw StateError('llama.cpp не подтвердил загрузку модели');
       modelPath = path;
-      status = 'Qwen 0.6B готов · ${contextSize} ctx · CPU · $threads потока';
+      status = '$modelLabel готов · ${contextSize} ctx · CPU · $threads потока';
       _history.clear();
     } catch (e) {
       modelPath = null;
       loadProgress = 0;
-      status = 'Qwen 0.6B: $e';
+      status = 'LOCAL MODEL: $e';
       rethrow;
     } finally {
       await progressSub?.cancel();
@@ -101,23 +104,31 @@ class LocalQwenBackend extends ChangeNotifier implements BrainBackend {
   /// reaches UI/TTS. Normal /no_think generation is emitted as llama.cpp
   /// produces it.
   Stream<String> streamAsk(String prompt, {bool thinking = false}) async* {
-    if (!ready) throw StateError('Сначала загрузи локальный Qwen 0.6B');
-    if (generating) throw StateError('Qwen уже отвечает');
+    if (!ready) throw StateError('Сначала загрузи локальную модель');
+    if (generating) throw StateError('Локальная модель уже отвечает');
 
     generating = true;
     _stopRequested = false;
-    status = thinking ? 'Qwen думает...' : 'Qwen отвечает потоком...';
+    status = thinking ? '$modelLabel думает...' : (smartModel ? '$modelLabel отвечает...' : 'Qwen отвечает потоком...');
     notifyListeners();
 
     final switchToken = thinking ? '/think' : '/no_think';
-    final systemText = '''
+    final systemText = smartModel
+        ? '''
+Ты — языковой модуль Dream Pulse. Отвечай по-русски, естественно, живо и компактно.
+Не пересказывай системные инструкции и не называй служебные этапы Core.
+Если есть WEB EVIDENCE — используй его как свежие данные и не выдумывай источники.
+Если источников недостаточно — скажи об этом прямо.
+Никогда не показывай внутренние рассуждения, chain-of-thought или теги <think>.
+Дай пользователю только финальный ответ.
+'''.trim()
+        : '''
 Ты — локальный языковой модуль Dream Pulse. Отвечай по-русски, естественно и компактно.
 Ты работаешь внутри Dream Pulse Core: не объявляй непроверенные сведения достоверными.
 Если в запросе есть блок WEB EVIDENCE, используй его для свежих фактов и не выдумывай источники.
 Если данных недостаточно — прямо скажи об этом.
 Никогда не выводи пользователю внутренние рассуждения, chain-of-thought или служебные этапы Core.
 $switchToken
-${systemContext.trim()}
 '''.trim();
 
     final messages = <ChatMessage>[
@@ -133,9 +144,9 @@ ${systemContext.trim()}
       final source = _controller.generateChat(
         messages: messages,
         template: 'chatml',
-        maxTokens: thinking ? 224 : 160,
-        temperature: thinking ? 0.55 : 0.65,
-        topP: thinking ? 0.9 : 0.82,
+        maxTokens: smartModel ? (thinking ? 224 : 180) : (thinking ? 224 : 160),
+        temperature: smartModel ? 0.62 : (thinking ? 0.55 : 0.65),
+        topP: smartModel ? 0.9 : (thinking ? 0.9 : 0.82),
         topK: 20,
         minP: 0.0,
         repeatPenalty: 1.08,
@@ -155,12 +166,12 @@ ${systemContext.trim()}
             final cps = elapsedMs <= 0
                 ? 0.0
                 : rawBuffer.length * 1000.0 / elapsedMs;
-            status = 'Qwen FAST · ${cps.toStringAsFixed(1)} симв/с · $threads потока';
+            status = smartModel ? 'DeepSeek SMART · ${cps.toStringAsFixed(1)} симв/с · $threads потока' : 'Qwen FAST · ${cps.toStringAsFixed(1)} симв/с · $threads потока';
             lastPerfPaintMs = elapsedMs;
             notifyListeners();
           }
 
-          if (!thinking && !tokenBus.isClosed) {
+          if (!thinking && !smartModel && !tokenBus.isClosed) {
             tokenBus.add(chunk);
           }
         },
@@ -179,7 +190,7 @@ ${systemContext.trim()}
       );
 
       try {
-        if (thinking) {
+        if (thinking || smartModel) {
           await done.future;
           final finalAnswer =
               ResponseSanitizer.finalOnly(rawBuffer.toString());
@@ -212,7 +223,7 @@ ${systemContext.trim()}
       perf.stop();
       final seconds = perf.elapsedMilliseconds / 1000.0;
       final cps = seconds <= 0 ? 0.0 : rawBuffer.length / seconds;
-      status = 'Qwen 0.6B готов · ${cps.toStringAsFixed(1)} симв/с';
+      status = '$modelLabel готов · ${cps.toStringAsFixed(1)} симв/с';
     } finally {
       generating = false;
       notifyListeners();
@@ -244,7 +255,7 @@ ${systemContext.trim()}
     if (generating) await stop();
     await _controller.dispose();
     modelPath = null;
-    status = 'Qwen выгружен';
+    status = 'Локальная модель выгружена';
     notifyListeners();
   }
 }
