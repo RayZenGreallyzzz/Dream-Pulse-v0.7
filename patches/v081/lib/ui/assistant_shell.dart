@@ -21,6 +21,7 @@ class _AssistantShellState extends State<AssistantShell> {
   late final SpeechController speech;
   late final VoiceInputController voiceInput;
   late final LocalQwenBackend localBrain;
+  late final QwenModelInstaller installer;
   late final BrainRouter brain;
   int index = 0;
 
@@ -31,6 +32,7 @@ class _AssistantShellState extends State<AssistantShell> {
     speech = SpeechController(session);
     voiceInput = VoiceInputController();
     localBrain = LocalQwenBackend();
+    installer = QwenModelInstaller();
     brain = BrainRouter(local: localBrain);
     speech.init();
     voiceInput.init();
@@ -39,9 +41,7 @@ class _AssistantShellState extends State<AssistantShell> {
 
   Future<void> _loadInstalledBrain() async {
     try {
-      final installer = QwenModelInstaller();
       final path = await installer.installedPathIfValid();
-      installer.dispose();
       if (path != null && !localBrain.ready && !localBrain.loading) {
         await localBrain.load(path, smartProfile: true);
       }
@@ -55,6 +55,7 @@ class _AssistantShellState extends State<AssistantShell> {
     speech.dispose();
     voiceInput.cancel();
     localBrain.unload();
+    installer.dispose();
     session.dispose();
     super.dispose();
   }
@@ -68,6 +69,7 @@ class _AssistantShellState extends State<AssistantShell> {
         voiceInput: voiceInput,
         brain: brain,
         localBrain: localBrain,
+        installer: installer,
       ),
       AvatarPage(session: session, speech: speech),
       const HomePage(),
