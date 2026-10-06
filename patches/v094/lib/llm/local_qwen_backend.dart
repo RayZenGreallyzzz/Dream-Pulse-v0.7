@@ -21,6 +21,9 @@ class LocalQwenBackend extends ChangeNotifier implements BrainBackend {
   int threads = 2;
   bool loading = false;
   bool generating = false;
+  bool _stopRequested = false;
+
+  bool get stopRequested => _stopRequested;
 
   @override
   String get name => 'Qwen3 0.6B Local';
@@ -96,6 +99,7 @@ class LocalQwenBackend extends ChangeNotifier implements BrainBackend {
     if (generating) throw StateError('Qwen уже отвечает');
 
     generating = true;
+    _stopRequested = false;
     status = thinking ? 'Qwen думает...' : 'Qwen отвечает потоком...';
     notifyListeners();
 
@@ -142,6 +146,11 @@ $switchToken
         }
       }
 
+      if (_stopRequested) {
+        status = 'Остановлено';
+        return;
+      }
+
       final answer = ResponseSanitizer.finalOnly(rawBuffer.toString());
       if (answer.isNotEmpty) {
         _history
@@ -172,6 +181,7 @@ $switchToken
 
   @override
   Future<void> stop() async {
+    _stopRequested = true;
     await _controller.stop();
     generating = false;
     status = 'Остановлено';
