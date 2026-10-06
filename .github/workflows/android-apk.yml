@@ -24,7 +24,6 @@ jobs:
       - name: Restore Dream Pulse v0.8 source
         run: |
           cat ci/v08m.part.00 ci/v08m.part.01 ci/v08m.part.02 > /tmp/v08.b64
-          echo "f353ad04095a73f461110af8853b69e733260c15f4d01e9690bedf6867334ce2  /tmp/v08.b64" | sha256sum -c -
           base64 -d /tmp/v08.b64 > /tmp/v08.tar.gz
           echo "8b5ba1caa9455ce8e6f2ac99af7546d0a597c218083325923f338048ebeb1957  /tmp/v08.tar.gz" | sha256sum -c -
           tar -xzf /tmp/v08.tar.gz -C .
