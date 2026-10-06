@@ -10,6 +10,7 @@ on:
       - 'patches/v081/**'
       - 'patches/v082/**'
       - 'patches/v09/**'
+      - 'patches/v092/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -101,6 +102,21 @@ jobs:
           grep -q "usesCleartextTraffic" scripts/bootstrap_android.sh
           rm -rf patches/v09
 
+      - name: Apply v0.9.2 neural voice layer
+        run: |
+          mkdir -p lib/avatar lib/voice
+          cp patches/v092/lib/avatar/speech_controller.dart lib/avatar/speech_controller.dart
+          cp patches/v092/lib/voice/voice_expression.dart lib/voice/voice_expression.dart
+          cp patches/v092/lib/voice/elevenlabs_voice_backend.dart lib/voice/elevenlabs_voice_backend.dart
+          python3 patches/v092/patch.py
+          python3 patches/v092/patch_pubspec.py
+          grep -q "version: 0.9.2+13" pubspec.yaml
+          grep -q "audioplayers: ^6.8.1" pubspec.yaml
+          grep -q "flutter_secure_storage: ^11.2.0" pubspec.yaml
+          grep -q "class ElevenLabsVoiceBackend" lib/voice/elevenlabs_voice_backend.dart
+          grep -q "NEURAL // ELEVENLABS" lib/ui/assistant_page.dart
+          rm -rf patches/v092
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -146,7 +162,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.9.1-personality-live-core-arm64-apk
+          name: dream-pulse-v0.9.2-neural-voice-live-core-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
