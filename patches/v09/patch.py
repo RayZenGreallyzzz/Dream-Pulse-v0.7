@@ -80,3 +80,15 @@ s = s.replace('Qwen 1.7B', 'Qwen 0.6B')
 s = s.replace('~1.28 GB', '~429 MB')
 s = s.replace('~1.28 ГБ', '~429 МБ')
 p.write_text(s)
+
+# Android 9+ blocks plain HTTP by default. Future PC Brain is a LAN service
+# (192.168.x.x), so enable cleartext for the app's local bridge. Tablet web
+# search itself still uses HTTPS endpoints only.
+p = Path('scripts/bootstrap_android.sh')
+s = p.read_text()
+needle = "if 'android:largeHeap=' not in s:\n    s=s.replace('<application', '<application android:largeHeap=\"true\"')"
+replacement = "if 'android:largeHeap=' not in s:\n    s=s.replace('<application', '<application android:largeHeap=\"true\" android:usesCleartextTraffic=\"true\"')\nelif 'android:usesCleartextTraffic=' not in s:\n    s=s.replace('android:largeHeap=\"true\"', 'android:largeHeap=\"true\" android:usesCleartextTraffic=\"true\"')"
+if needle not in s:
+    raise SystemExit('bootstrap_android: largeHeap block not found')
+s = s.replace(needle, replacement, 1)
+p.write_text(s)
