@@ -5,7 +5,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'ci/source3.part.*'
+      - 'ci/v08m.part.*'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -21,14 +21,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore verified Dream Pulse v0.8 source
+      - name: Restore Dream Pulse v0.8 source
         run: |
-          cat ci/source3.part.00 ci/source3.part.01 ci/source3.part.02 ci/source3.part.03 \
-              ci/source3.part.04 ci/source3.part.05 ci/source3.part.06 ci/source3.part.07 > /tmp/source3.b64
-          echo "b7870b0489d0138ae3b7e175a722d63b93a8639bc31557410a3d26b30179c9d9  /tmp/source3.b64" | sha256sum -c -
-          base64 -d /tmp/source3.b64 > /tmp/source3.tar.gz
-          echo "318d6b0fe7921984a51ee680756be1d4f94815e9df427d5a76a1f240dd6cd5e8  /tmp/source3.tar.gz" | sha256sum -c -
-          tar -xzf /tmp/source3.tar.gz -C .
+          cat ci/v08m.part.00 ci/v08m.part.01 ci/v08m.part.02 > /tmp/v08.b64
+          echo "f353ad04095a73f461110af8853b69e733260c15f4d01e9690bedf6867334ce2  /tmp/v08.b64" | sha256sum -c -
+          base64 -d /tmp/v08.b64 > /tmp/v08.tar.gz
+          echo "8b5ba1caa9455ce8e6f2ac99af7546d0a597c218083325923f338048ebeb1957  /tmp/v08.tar.gz" | sha256sum -c -
+          tar -xzf /tmp/v08.tar.gz -C .
           test -f pubspec.yaml
           test -f lib/main.dart
           test -f lib/llm/qwen_model_installer.dart
