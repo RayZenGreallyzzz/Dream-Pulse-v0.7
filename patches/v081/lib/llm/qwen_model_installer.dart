@@ -56,6 +56,19 @@ class QwenModelInstaller extends ChangeNotifier {
     notifyListeners();
   }
 
+  Future<String> prepare() async {
+    final existing = await installedPathIfValid();
+    if (existing != null) {
+      modelPath = existing;
+      installed = true;
+      progress = 1;
+      status = 'LOCAL BRAIN READY · Qwen3 1.7B Q4';
+      notifyListeners();
+      return existing;
+    }
+    return install();
+  }
+
   Future<String> install() async {
     if (downloading || verifying) {
       throw StateError('Установка уже выполняется');
