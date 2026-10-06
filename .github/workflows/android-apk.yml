@@ -8,6 +8,7 @@ on:
       - 'ci/v08m.part.*'
       - 'patches/v08/**'
       - 'patches/v081/**'
+      - 'patches/v082/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -62,6 +63,17 @@ jobs:
           grep -q "d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5" lib/llm/qwen_model_installer.dart
           rm -rf patches/v081
 
+      - name: Apply v0.8.2 strict 4GB SAFE runtime
+        run: |
+          cp patches/v082/lib/llm/local_qwen_backend.dart lib/llm/local_qwen_backend.dart
+          cp patches/v082/lib/ui/assistant_shell.dart lib/ui/assistant_shell.dart
+          python3 patches/v082/patch_pubspec.py
+          grep -q "version: 0.8.2+10" pubspec.yaml
+          grep -q "contextSize = 1024" lib/llm/local_qwen_backend.dart
+          grep -q "gpuLayers = 0" lib/llm/local_qwen_backend.dart
+          grep -q "threads = 2" lib/llm/local_qwen_backend.dart
+          rm -rf patches/v082
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -106,7 +118,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.8.1-arm64-apk
+          name: dream-pulse-v0.8.2-4gb-safe-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
