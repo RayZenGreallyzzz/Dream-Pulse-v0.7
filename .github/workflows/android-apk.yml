@@ -85,6 +85,12 @@ jobs:
           if old not in s:
               raise SystemExit('Expected avatar FilePicker block not found')
           s = s.replace(old, new)
+
+          old_bytes = """    Uint8List? bytes = file.bytes;\n    if (bytes == null && file.path != null) {\n      bytes = await file.xFile.readAsBytes();\n    }\n    if (bytes == null || bytes.isEmpty) {"""
+          new_bytes = """    final Uint8List bytes = await file.xFile.readAsBytes();\n    if (bytes.isEmpty) {"""
+          if old_bytes not in s:
+              raise SystemExit('Expected avatar bytes block not found')
+          s = s.replace(old_bytes, new_bytes)
           p.write_text(s)
           PY
 
