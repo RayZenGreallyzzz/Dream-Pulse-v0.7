@@ -7,6 +7,7 @@ on:
     paths:
       - 'ci/v08m.part.*'
       - 'patches/v08/**'
+      - 'patches/v081/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -36,7 +37,7 @@ jobs:
           test -f lib/llm/qwen_model_installer.dart
           test -f scripts/bootstrap_android.sh
 
-      - name: Apply sharp UI and avatar scene fixes
+      - name: Apply v0.8 sharp UI and avatar scene fixes
         run: |
           cp patches/v08/lib/main.dart lib/main.dart
           cp patches/v08/lib/ui/avatar_page.dart lib/ui/avatar_page.dart
@@ -44,6 +45,22 @@ jobs:
           grep -q "version: 0.8.0+8" pubspec.yaml
           grep -q "Qwen3-1.7B-Q4_K_M.gguf" lib/llm/qwen_model_installer.dart
           rm -rf patches/v08
+
+      - name: Apply v0.8.1 launch, installer, package and signing
+        run: |
+          mkdir -p lib/llm lib/ui scripts ci/test-signing
+          cp patches/v081/lib/main.dart lib/main.dart
+          cp patches/v081/lib/llm/qwen_model_installer.dart lib/llm/qwen_model_installer.dart
+          cp patches/v081/lib/ui/launch_gate.dart lib/ui/launch_gate.dart
+          cp patches/v081/lib/ui/assistant_shell.dart lib/ui/assistant_shell.dart
+          cp patches/v081/scripts/bootstrap_android.sh scripts/bootstrap_android.sh
+          cp patches/v081/ci/test-signing/dream-pulse-test.jks.b64 ci/test-signing/dream-pulse-test.jks.b64
+          chmod +x scripts/bootstrap_android.sh
+          python3 patches/v081/patch_pubspec.py
+          grep -q "version: 0.8.1+9" pubspec.yaml
+          grep -q "path_provider" pubspec.yaml
+          grep -q "d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5" lib/llm/qwen_model_installer.dart
+          rm -rf patches/v081
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -76,6 +93,9 @@ jobs:
         run: |
           bash scripts/bootstrap_android.sh
           rm -f test/widget_test.dart
+          grep -q 'com.dreampulse.assistant' android/app/build.gradle.kts
+          test -f android/app/dream-pulse-test.jks
+          test -f android/app/src/main/res/drawable/dream_pulse_icon.xml
 
       - name: Flutter analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
@@ -86,7 +106,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.8-sharp-ui-arm64-apk
+          name: dream-pulse-v0.8.1-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
