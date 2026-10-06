@@ -1,0 +1,28 @@
+name: Inspect Local Backend
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/inspect-backend.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        run: |
+          cat ci/v08m.part.00 ci/v08m.part.01 ci/v08m.part.02 > /tmp/v08.b64
+          base64 -d /tmp/v08.b64 > /tmp/v08.tar.gz
+          tar -xzf /tmp/v08.tar.gz -C .
+      - name: Print local Qwen backend
+        run: |
+          echo '===== local_qwen_backend.dart ====='
+          sed -n '1,240p' lib/llm/local_qwen_backend.dart
+          echo '===== assistant_page load calls ====='
+          grep -Rni "localBrain.load\|smartProfile\|contextSize\|gpuLayers\|detectGpu" lib | head -120 || true
