@@ -121,14 +121,11 @@ class PulseCoordinator extends ChangeNotifier {
 
       final memoryContext = _memoryContext(cleanPrompt, domain);
       final webEvidence = webSearch.evidenceText(sources);
-      // Personality belongs to the model system role, never inside USER TASK.
-      // Tiny local models otherwise tend to echo hidden persona instructions.
-      brain.local.systemContext = personality.promptInstructions;
-
       final augmented = _composePrompt(
         cleanPrompt,
         memoryContext: memoryContext,
         webEvidence: webEvidence,
+        personalityInstructions: personality.promptInstructions,
       );
 
       status = thinking ? 'MODEL · deep final-only' : 'MODEL · streaming';
@@ -222,9 +219,11 @@ class PulseCoordinator extends ChangeNotifier {
     String prompt, {
     required String memoryContext,
     required String webEvidence,
+    required String personalityInstructions,
   }) {
     final out = StringBuffer();
-    out.writeln('USER TASK:');
+    out.writeln(personalityInstructions);
+    out.writeln('\nUSER TASK:');
     out.writeln(prompt);
     if (memoryContext.isNotEmpty) {
       out.writeln('\nTRUSTED CORE MEMORY:');
@@ -273,7 +272,9 @@ class PulseCoordinator extends ChangeNotifier {
     final p = prompt.toLowerCase();
     const markers = [
       'сегодня', 'сейчас', 'последн', 'новост', 'курс ', 'цена', 'погода',
-      'найди', 'поиск', 'интернет', 'проверь в сети', 'актуальн', 'кто сейчас',
+      'найди', 'поиск', 'интернет', 'в интернете', 'проверь в сети', 'в сети',
+      'сеть', 'онлайн', 'сайт', 'ссылк', 'проверь', 'посмотри в интернете',
+      'актуальн', 'кто сейчас', 'web', 'browser',
       'latest', 'today', 'current', 'news', 'price', 'weather', 'search',
     ];
     return markers.any(p.contains);
