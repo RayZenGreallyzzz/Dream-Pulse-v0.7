@@ -5,7 +5,7 @@ on:
   push:
     branches: [ main ]
     paths:
-      - 'ci/**'
+      - 'ci/source3.tar.gz'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -21,78 +21,14 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore verified source tree
+      - name: Restore Dream Pulse v0.8 source
         run: |
-          cat ci/source2.part.00 \
-              ci/source2.part.01 \
-              ci/source2.part.02 \
-              ci/source2.part.03 \
-              ci/source2.part.04 \
-              ci/source2.part.05 \
-              ci/source2.part.06 \
-              ci/source2.part.07 \
-              ci/source2.part.08 > /tmp/source.b64
-          echo "f560e7fcef942060f2bcd1e20117c55914729991c4ee0c599461f3c9b3c5bf31  /tmp/source.b64" | sha256sum -c -
-          base64 -d /tmp/source.b64 > /tmp/source.tar.gz
-          echo "98ac0918ba80ff9dea153f24abc863595252f5d778e51ca6bae0ec9a3b3b288d  /tmp/source.tar.gz" | sha256sum -c -
-          tar -xzf /tmp/source.tar.gz -C .
+          echo "318d6b0fe7921984a51ee680756be1d4f94815e9df427d5a76a1f240dd6cd5e8  ci/source3.tar.gz" | sha256sum -c -
+          tar -xzf ci/source3.tar.gz -C .
           test -f pubspec.yaml
           test -f lib/main.dart
+          test -f lib/llm/qwen_model_installer.dart
           test -f scripts/bootstrap_android.sh
-
-      - name: Apply Flutter 3.47 compatibility fixes
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-
-          p = Path('pubspec.yaml')
-          s = p.read_text()
-          s = s.replace('file_picker: ^11.0.3', 'file_picker: ^13.1.0')
-          p.write_text(s)
-
-          p = Path('lib/avatar/avatar_stage.dart')
-          s = p.read_text()
-          s = s.replace(
-              "import 'package:flutter/material.dart';",
-              "import 'package:flutter/foundation.dart';\nimport 'package:flutter/material.dart';",
-          )
-          s = s.replace(
-              "    animations = List<three.AnimationClip>.from(gltf.animations);",
-              "    final loadedAnimations = gltf.animations;\n"
-              "    animations = loadedAnimations == null\n"
-              "        ? <three.AnimationClip>[]\n"
-              "        : loadedAnimations.whereType<three.AnimationClip>().toList();",
-          )
-          s = s.replace(
-              "      final delta = dt is num ? dt.toDouble() : 0.016;",
-              "      final delta = dt.toDouble();",
-          )
-          p.write_text(s)
-
-          p = Path('lib/ui/assistant_page.dart')
-          s = p.read_text()
-          old = """    final result = await FilePicker.platform.pickFiles(\n      type: FileType.custom,\n      allowedExtensions: const ['gguf'],\n      allowMultiple: false,\n    );\n    final path = result?.files.single.path;"""
-          new = """    final file = await FilePicker.pickFile(\n      type: FileType.custom,\n      allowedExtensions: const ['gguf'],\n    );\n    final path = file?.path;"""
-          if old not in s:
-              raise SystemExit('Expected FilePicker block not found')
-          s = s.replace(old, new)
-          p.write_text(s)
-
-          p = Path('lib/ui/avatar_page.dart')
-          s = p.read_text()
-          old = """    final result = await FilePicker.pickFiles(\n      type: FileType.custom,\n      allowedExtensions: const ['glb'],\n      withData: true,\n    );\n    if (result == null || result.files.isEmpty) return;\n    final file = result.files.first;"""
-          new = """    final file = await FilePicker.pickFile(\n      type: FileType.custom,\n      allowedExtensions: const ['glb'],\n    );\n    if (file == null) return;"""
-          if old not in s:
-              raise SystemExit('Expected avatar FilePicker block not found')
-          s = s.replace(old, new)
-
-          old_bytes = """    Uint8List? bytes = file.bytes;\n    if (bytes == null && file.path != null) {\n      bytes = await file.xFile.readAsBytes();\n    }\n    if (bytes == null || bytes.isEmpty) {"""
-          new_bytes = """    final Uint8List bytes = await file.xFile.readAsBytes();\n    if (bytes.isEmpty) {"""
-          if old_bytes not in s:
-              raise SystemExit('Expected avatar bytes block not found')
-          s = s.replace(old_bytes, new_bytes)
-          p.write_text(s)
-          PY
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -117,11 +53,9 @@ jobs:
           if [ ! -x "$SDKMANAGER" ]; then
             SDKMANAGER="$(command -v sdkmanager)"
           fi
-          echo "Using sdkmanager: $SDKMANAGER"
           yes | "$SDKMANAGER" --licenses >/dev/null || true
           "$SDKMANAGER" "cmake;3.31.4"
           test -x "$ANDROID_HOME/cmake/3.31.4/bin/cmake"
-          "$ANDROID_HOME/cmake/3.31.4/bin/cmake" --version
 
       - name: Bootstrap Android project
         run: |
@@ -137,7 +71,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.7-arm64-apk
+          name: dream-pulse-v0.8-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
