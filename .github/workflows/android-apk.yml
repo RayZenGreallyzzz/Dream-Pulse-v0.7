@@ -6,6 +6,7 @@ on:
     branches: [ main ]
     paths:
       - 'ci/v08m.part.*'
+      - 'patches/v08/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -34,6 +35,14 @@ jobs:
           test -f lib/main.dart
           test -f lib/llm/qwen_model_installer.dart
           test -f scripts/bootstrap_android.sh
+
+      - name: Apply sharp UI and avatar scene fixes
+        run: |
+          cp patches/v08/lib/main.dart lib/main.dart
+          cp patches/v08/lib/ui/avatar_page.dart lib/ui/avatar_page.dart
+          python3 patches/v08/patch.py
+          grep -q "version: 0.8.0+8" pubspec.yaml
+          grep -q "Qwen3-1.7B-Q4_K_M.gguf" lib/llm/qwen_model_installer.dart
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -76,7 +85,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.8-arm64-apk
+          name: dream-pulse-v0.8-sharp-ui-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
