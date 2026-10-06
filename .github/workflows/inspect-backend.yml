@@ -20,14 +20,18 @@ jobs:
           cat ci/v08m.part.00 ci/v08m.part.01 ci/v08m.part.02 > /tmp/v08.b64
           base64 -d /tmp/v08.b64 > /tmp/v08.tar.gz
           tar -xzf /tmp/v08.tar.gz -C .
-      - name: Print Dream Pulse core
+      - name: Print integration files
         run: |
-          echo '===== core files ====='
-          find lib/core -maxdepth 2 -type f -print | sort || true
-          for f in lib/core/*.dart; do
+          for f in \
+            lib/ui/assistant_shell.dart \
+            lib/ui/assistant_page.dart \
+            lib/storage/memory_store.dart \
+            lib/ui/home_page.dart \
+            lib/llm/brain_router.dart \
+            lib/net/pc_bridge.dart \
+            lib/core/dream_pulse_engine.dart \
+            lib/core/models.dart; do
             [ -f "$f" ] || continue
             echo "===== $f ====="
-            sed -n '1,280p' "$f"
+            sed -n '1,560p' "$f"
           done
-          echo '===== engine references ====='
-          grep -RniE 'DreamPulseEngine|CriticRing|worker|processor|assimil|absorb|memory|core' lib/ui lib/llm lib/core | head -300 || true
