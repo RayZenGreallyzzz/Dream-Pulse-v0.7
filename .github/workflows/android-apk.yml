@@ -122,13 +122,11 @@ jobs:
         run: |
           cp patches/v093/lib/avatar/speech_controller.dart lib/avatar/speech_controller.dart
           python3 patches/v093/patch.py
-          python3 patches/v093/patch_android.py
           python3 patches/v093/patch_pubspec.py
           grep -q "version: 0.9.3+14" pubspec.yaml
           grep -q "ru.kost.ruvoice" lib/avatar/speech_controller.dart
           grep -q "baya-ru" lib/avatar/speech_controller.dart
           grep -q "LOCAL // SILERO BAYA" lib/ui/assistant_page.dart
-          grep -q "android.intent.action.TTS_SERVICE" scripts/bootstrap_android.sh
           rm -rf patches/v093
 
       - name: Set up Java 17
@@ -162,6 +160,18 @@ jobs:
         run: |
           bash scripts/bootstrap_android.sh
           rm -f test/widget_test.dart
+          python3 - <<'PY'
+          from pathlib import Path
+          p = Path('android/app/src/main/AndroidManifest.xml')
+          s = p.read_text()
+          if 'android.intent.action.TTS_SERVICE' not in s:
+              block = '''        <intent>\n            <action android:name="android.intent.action.TTS_SERVICE" />\n        </intent>\n'''
+              if '</queries>' in s:
+                  s = s.replace('    </queries>', block + '    </queries>', 1)
+              else:
+                  s = s.replace('<application', '    <queries>\n' + block + '    </queries>\n    <application', 1)
+          p.write_text(s)
+          PY
           grep -q 'com.dreampulse.assistant' android/app/build.gradle.kts
           grep -q 'usesCleartextTraffic="true"' android/app/src/main/AndroidManifest.xml
           grep -q 'android.intent.action.TTS_SERVICE' android/app/src/main/AndroidManifest.xml
