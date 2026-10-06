@@ -23,6 +23,8 @@ jobs:
       - name: Print integration files
         run: |
           for f in \
+            lib/avatar/speech_controller.dart \
+            lib/voice/voice_input_controller.dart \
             lib/ui/assistant_shell.dart \
             lib/ui/assistant_page.dart \
             lib/storage/memory_store.dart \
@@ -30,8 +32,9 @@ jobs:
             lib/llm/brain_router.dart \
             lib/net/pc_bridge.dart \
             lib/core/dream_pulse_engine.dart \
-            lib/core/models.dart; do
+            lib/core/models.dart \
+            pubspec.yaml; do
             [ -f "$f" ] || continue
             echo "===== $f ====="
-            sed -n '1,560p' "$f"
+            sed -n '1,620p' "$f"
           done
