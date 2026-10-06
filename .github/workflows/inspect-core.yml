@@ -22,21 +22,20 @@ jobs:
           tar -xzf /tmp/v08.tar.gz -C .
       - name: Print core integration surface
         run: |
-          echo '===== core files ====='
-          find lib/core lib/memory -maxdepth 3 -type f 2>/dev/null | sort || true
+          echo '===== core/storage files ====='
+          find lib/core lib/storage -maxdepth 3 -type f 2>/dev/null | sort || true
           for f in \
             lib/core/dream_pulse_engine.dart \
             lib/core/critic_ring.dart \
-            lib/core/pulse_node.dart \
-            lib/core/world_network.dart \
-            lib/memory/memory_store.dart \
-            lib/memory/sqlite_memory.dart \
+            lib/core/models.dart \
+            lib/storage/memory_store.dart \
+            lib/ui/home_page.dart \
             lib/ui/assistant_shell.dart \
             lib/ui/assistant_page.dart; do
             if [ -f "$f" ]; then
               echo "===== $f ====="
-              sed -n '1,360p' "$f"
+              sed -n '1,520p' "$f"
             fi
           done
           echo '===== references ====='
-          grep -RniE 'DreamPulseEngine|CriticRing|Worker|Processor|Memory|absorb|pulse|assimil|worldTick|learn|remember' lib/core lib/memory lib/ui lib/llm 2>/dev/null | head -500 || true
+          grep -RniE 'DreamPulseEngine|CriticRing|Worker|Processor|MemoryStore|saveKnowledge|loadKnowledge|logPulse|absorb|pulse|assimil|learn|remember' lib/core lib/storage lib/ui lib/llm 2>/dev/null | head -700 || true
