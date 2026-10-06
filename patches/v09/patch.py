@@ -11,10 +11,12 @@ if "../core/pulse_coordinator.dart" not in s:
 s = s.replace(
     "    required this.installer,\n  });",
     "    required this.installer,\n    required this.core,\n  });",
+    1,
 )
 s = s.replace(
     "  final QwenModelInstaller installer;\n",
     "  final QwenModelInstaller installer;\n  final PulseCoordinator core;\n",
+    1,
 )
 
 # 4 GB tablet: never auto-download or auto-load a model just by opening chat.
