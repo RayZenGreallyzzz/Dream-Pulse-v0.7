@@ -45,6 +45,11 @@ jobs:
           python3 - <<'PY'
           from pathlib import Path
 
+          p = Path('pubspec.yaml')
+          s = p.read_text()
+          s = s.replace('file_picker: ^11.0.3', 'file_picker: ^13.1.0')
+          p.write_text(s)
+
           p = Path('lib/avatar/avatar_stage.dart')
           s = p.read_text()
           s = s.replace(
@@ -65,7 +70,12 @@ jobs:
           p.write_text(s)
 
           p = Path('lib/ui/assistant_page.dart')
-          s = p.read_text().replace('FilePicker.platform.pickFiles(', 'FilePicker.pickFiles(')
+          s = p.read_text()
+          old = """    final result = await FilePicker.platform.pickFiles(\n      type: FileType.custom,\n      allowedExtensions: const ['gguf'],\n      allowMultiple: false,\n    );\n    final path = result?.files.single.path;"""
+          new = """    final file = await FilePicker.pickFile(\n      type: FileType.custom,\n      allowedExtensions: const ['gguf'],\n    );\n    final path = file?.path;"""
+          if old not in s:
+              raise SystemExit('Expected FilePicker block not found')
+          s = s.replace(old, new)
           p.write_text(s)
           PY
 
@@ -106,20 +116,13 @@ jobs:
       - name: Flutter analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
-      - name: Build release APK
-        run: flutter build apk --release
+      - name: Build ARM64 release APK
+        run: flutter build apk --release --target-platform android-arm64
 
-      - name: Build split APKs
-        run: flutter build apk --release --split-per-abi
-
-      - name: Upload APK artifacts
+      - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.7-android-apk
-          path: |
-            build/app/outputs/flutter-apk/app-release.apk
-            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
-            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
-            build/app/outputs/flutter-apk/app-x86_64-release.apk
+          name: dream-pulse-v0.7-arm64-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
