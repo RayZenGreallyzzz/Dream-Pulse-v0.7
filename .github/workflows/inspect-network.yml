@@ -1,0 +1,30 @@
+name: Inspect Network Layer
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/inspect-network.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        run: |
+          cat ci/v08m.part.00 ci/v08m.part.01 ci/v08m.part.02 > /tmp/v08.b64
+          base64 -d /tmp/v08.b64 > /tmp/v08.tar.gz
+          tar -xzf /tmp/v08.tar.gz -C .
+      - name: Print network related files
+        run: |
+          echo '===== files ====='
+          find lib -maxdepth 3 -type f | sort | grep -Ei 'brain|web|search|http|network|router|pc' || true
+          echo '===== refs ====='
+          grep -RniE 'http://|https://|HttpClient|WebSearch|search|PC Brain|pcBrain|BrainRouter|sendTransaction' lib | head -300 || true
+          for f in lib/llm/brain_router.dart lib/llm/pc_brain_backend.dart lib/llm/web_search.dart lib/agent/assistant_agent.dart; do
+            if [ -f "$f" ]; then echo "===== $f ====="; sed -n '1,260p' "$f"; fi
+          done
