@@ -1,0 +1,70 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - 'ci/**'
+      - '.github/workflows/android-apk.yml'
+      - 'README.md'
+
+permissions:
+  contents: read
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Restore source tree
+        run: |
+          cat ci/source.part.00 ci/source.part.01 ci/source.part.02 ci/source.part.03 ci/source.part.04 ci/source.part.05 > /tmp/source.b64
+          base64 -d /tmp/source.b64 > /tmp/source.tar.gz
+          tar -xzf /tmp/source.tar.gz -C .
+          rm -rf ci
+
+      - name: Set up Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Show tool versions
+        run: |
+          flutter --version
+          java -version
+
+      - name: Bootstrap Android project
+        run: bash scripts/bootstrap_android.sh
+
+      - name: Flutter analyze
+        run: flutter analyze
+
+      - name: Build release APK
+        run: flutter build apk --release
+
+      - name: Build split APKs
+        run: flutter build apk --release --split-per-abi
+
+      - name: Upload APK artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dream-pulse-v0.7-android-apk
+          path: |
+            build/app/outputs/flutter-apk/app-release.apk
+            build/app/outputs/flutter-apk/app-arm64-v8a-release.apk
+            build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk
+            build/app/outputs/flutter-apk/app-x86_64-release.apk
+          if-no-files-found: error
+          retention-days: 14
