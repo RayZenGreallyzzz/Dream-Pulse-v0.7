@@ -1,0 +1,29 @@
+name: Inspect Brain Contracts
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/inspect-brain.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        run: |
+          cat ci/v08m.part.00 ci/v08m.part.01 ci/v08m.part.02 > /tmp/v08.b64
+          base64 -d /tmp/v08.b64 > /tmp/v08.tar.gz
+          tar -xzf /tmp/v08.tar.gz -C .
+      - name: Print brain contracts
+        run: |
+          echo '===== brain_backend.dart ====='
+          cat lib/llm/brain_backend.dart
+          echo '===== brain_router.dart ====='
+          cat lib/llm/brain_router.dart
+          echo '===== assistant_page ask call ====='
+          grep -n -B 8 -A 24 'coordinator.ask\|brain.ask\|speech.speak' lib/ui/assistant_page.dart || true
