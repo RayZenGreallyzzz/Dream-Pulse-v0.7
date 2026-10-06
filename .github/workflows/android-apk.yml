@@ -9,6 +9,7 @@ on:
       - 'patches/v08/**'
       - 'patches/v081/**'
       - 'patches/v082/**'
+      - 'patches/v09/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -60,7 +61,6 @@ jobs:
           python3 patches/v081/patch_pubspec.py
           grep -q "version: 0.8.1+9" pubspec.yaml
           grep -q "path_provider" pubspec.yaml
-          grep -q "d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5" lib/llm/qwen_model_installer.dart
           rm -rf patches/v081
 
       - name: Apply v0.8.2 strict 4GB SAFE runtime
@@ -69,10 +69,28 @@ jobs:
           cp patches/v082/lib/ui/assistant_shell.dart lib/ui/assistant_shell.dart
           python3 patches/v082/patch_pubspec.py
           grep -q "version: 0.8.2+10" pubspec.yaml
-          grep -q "contextSize = 1024" lib/llm/local_qwen_backend.dart
-          grep -q "gpuLayers = 0" lib/llm/local_qwen_backend.dart
-          grep -q "threads = 2" lib/llm/local_qwen_backend.dart
           rm -rf patches/v082
+
+      - name: Apply v0.9 live Dream Pulse Core
+        run: |
+          mkdir -p lib/core lib/llm lib/net lib/storage lib/ui
+          cp patches/v09/lib/core/dream_pulse_engine.dart lib/core/dream_pulse_engine.dart
+          cp patches/v09/lib/core/pulse_coordinator.dart lib/core/pulse_coordinator.dart
+          cp patches/v09/lib/llm/local_qwen_backend.dart lib/llm/local_qwen_backend.dart
+          cp patches/v09/lib/llm/qwen_model_installer.dart lib/llm/qwen_model_installer.dart
+          cp patches/v09/lib/net/tablet_web_search.dart lib/net/tablet_web_search.dart
+          cp patches/v09/lib/storage/memory_store.dart lib/storage/memory_store.dart
+          cp patches/v09/lib/ui/assistant_shell.dart lib/ui/assistant_shell.dart
+          cp patches/v09/lib/ui/home_page.dart lib/ui/home_page.dart
+          python3 patches/v09/patch.py
+          python3 patches/v09/patch_pubspec.py
+          grep -q "version: 0.9.0+11" pubspec.yaml
+          grep -q "Qwen3-0.6B-Q4_0.gguf" lib/llm/qwen_model_installer.dart
+          grep -q "da2572f16c06133561ce56accaa822216f2391ef4d37fba427801cd6736417d4" lib/llm/qwen_model_installer.dart
+          grep -q "class PulseCoordinator" lib/core/pulse_coordinator.dart
+          grep -q "html.duckduckgo.com" lib/net/tablet_web_search.dart
+          grep -q "usesCleartextTraffic" scripts/bootstrap_android.sh
+          rm -rf patches/v09
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -106,6 +124,7 @@ jobs:
           bash scripts/bootstrap_android.sh
           rm -f test/widget_test.dart
           grep -q 'com.dreampulse.assistant' android/app/build.gradle.kts
+          grep -q 'usesCleartextTraffic="true"' android/app/src/main/AndroidManifest.xml
           test -f android/app/dream-pulse-test.jks
           test -f android/app/src/main/res/drawable/dream_pulse_icon.xml
 
@@ -118,7 +137,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.8.2-4gb-safe-arm64-apk
+          name: dream-pulse-v0.9-live-core-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
