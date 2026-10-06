@@ -21,12 +21,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Restore source tree
+      - name: Restore verified source tree
         run: |
-          cat ci/source.part.00 ci/source.part.01 ci/source.part.02 ci/source.part.03 ci/source.part.04 ci/source.part.05 > /tmp/source.b64
+          cat ci/source2.part.00 \
+              ci/source2.part.01 \
+              ci/source2.part.02 \
+              ci/source2.part.03 \
+              ci/source2.part.04 \
+              ci/source2.part.05 \
+              ci/source2.part.06 \
+              ci/source2.part.07 \
+              ci/source2.part.08 > /tmp/source.b64
+          echo "f560e7fcef942060f2bcd1e20117c55914729991c4ee0c599461f3c9b3c5bf31  /tmp/source.b64" | sha256sum -c -
           base64 -d /tmp/source.b64 > /tmp/source.tar.gz
+          echo "98ac0918ba80ff9dea153f24abc863595252f5d778e51ca6bae0ec9a3b3b288d  /tmp/source.tar.gz" | sha256sum -c -
           tar -xzf /tmp/source.tar.gz -C .
-          rm -rf ci
+          test -f pubspec.yaml
+          test -f lib/main.dart
+          test -f scripts/bootstrap_android.sh
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
