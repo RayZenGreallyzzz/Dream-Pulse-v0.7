@@ -3,7 +3,9 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 
 import '../llm/brain_router.dart';
+import '../llm/response_sanitizer.dart';
 import '../net/tablet_web_search.dart';
+import '../personality/personality_engine.dart';
 import '../storage/memory_store.dart';
 import 'dream_pulse_engine.dart';
 import 'models.dart';
@@ -19,12 +21,14 @@ class PulseCoordinator extends ChangeNotifier {
     required this.memory,
     required this.brain,
     required this.webSearch,
+    required this.personality,
   });
 
   final DreamPulseEngine engine;
   final MemoryStore memory;
   final BrainRouter brain;
   final TabletWebSearch webSearch;
+  final PersonalityEngine personality;
 
   bool memoryReady = false;
   String memoryStatus = 'SQLite: opening...';
@@ -41,6 +45,14 @@ class PulseCoordinator extends ChangeNotifier {
       final purged = await memory.purgeSimulatedKnowledge();
       final restored = await memory.loadKnowledge();
       engine.restoreTrusted(restored);
+
+      final restoredPersonality = await memory.loadPersonalityState();
+      personality.restore(restoredPersonality);
+      final changed = personality.ensureDaily(DateTime.now());
+      if (restoredPersonality == null || changed) {
+        await memory.savePersonalityState(personality.state);
+      }
+
       memoryReady = true;
       memoryStatus = 'SQLite: ${restored.length} trusted${purged > 0 ? ' · purged $purged simulated' : ''}';
     } catch (e) {
@@ -57,6 +69,10 @@ class PulseCoordinator extends ChangeNotifier {
   }) async {
     final cleanPrompt = prompt.trim();
     if (cleanPrompt.isEmpty) return '';
+
+    if (personality.ensureDaily(DateTime.now()) && memoryReady) {
+      await memory.savePersonalityState(personality.state);
+    }
 
     final domain = _classifyDomain(cleanPrompt);
     lastTask = cleanPrompt;
@@ -90,15 +106,18 @@ class PulseCoordinator extends ChangeNotifier {
         cleanPrompt,
         memoryContext: memoryContext,
         webEvidence: webEvidence,
+        personalityInstructions: personality.promptInstructions,
       );
 
-      // If direct tablet search produced no evidence, PC Brain may still use
-      // its own web route when available. Otherwise avoid duplicate searches.
-      final answer = await brain.ask(
+      final rawAnswer = await brain.ask(
         augmented,
         thinking: thinking,
         allowWeb: useWeb && sources.isEmpty,
       );
+      final answer = ResponseSanitizer.finalOnly(rawAnswer);
+      if (answer.isEmpty) {
+        throw StateError('Модель не сформировала финальный ответ');
+      }
 
       final distinctHosts = sources.map((e) => e.host).where((e) => e.isNotEmpty).toSet().length;
       final evidenceConfidence = distinctHosts == 0
@@ -116,10 +135,7 @@ class PulseCoordinator extends ChangeNotifier {
       status = 'CRITIC · $lastVerdict';
       notifyListeners();
 
-      // Two independent hosts are the minimum local evidence threshold.
-      // This is deliberately conservative: offline Qwen answers are useful
-      // for conversation but do not become trusted facts automatically.
-      if (verdict.accepted && distinctHosts >= 2 && answer.trim().isNotEmpty) {
+      if (verdict.accepted && distinctHosts >= 2) {
         final unit = KnowledgeUnit(
           topic: domain,
           rule: _knowledgeRule(cleanPrompt, answer),
@@ -141,6 +157,11 @@ class PulseCoordinator extends ChangeNotifier {
       status = 'SPAWN · live worker';
       notifyListeners();
 
+      final personalityChanged = personality.observeConversation(cleanPrompt, answer);
+      if (personalityChanged && memoryReady) {
+        await memory.savePersonalityState(personality.state);
+      }
+
       return answer;
     } catch (e) {
       lastVerdict = 'ERROR / NOT ABSORBED';
@@ -155,7 +176,7 @@ class PulseCoordinator extends ChangeNotifier {
       }
       engine.finishLiveTask();
       if (!status.startsWith('CORE ERROR')) {
-        status = 'CORE IDLE · ${engine.trusted.length} trusted';
+        status = 'CORE IDLE · ${engine.trusted.length} trusted · ${personality.moodLabel}';
       }
       notifyListeners();
     }
@@ -165,9 +186,11 @@ class PulseCoordinator extends ChangeNotifier {
     String prompt, {
     required String memoryContext,
     required String webEvidence,
+    required String personalityInstructions,
   }) {
     final out = StringBuffer();
-    out.writeln('USER TASK:');
+    out.writeln(personalityInstructions);
+    out.writeln('\nUSER TASK:');
     out.writeln(prompt);
     if (memoryContext.isNotEmpty) {
       out.writeln('\nTRUSTED CORE MEMORY:');

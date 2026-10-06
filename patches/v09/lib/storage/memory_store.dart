@@ -5,6 +5,7 @@ import 'package:sqflite/sqflite.dart' as mobile;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import '../core/models.dart';
+import '../personality/personality_state.dart';
 
 class MemoryStore {
   dynamic _db;
@@ -23,7 +24,7 @@ class MemoryStore {
     _db = await factory.openDatabase(
       path,
       options: mobile.OpenDatabaseOptions(
-        version: 1,
+        version: 2,
         onCreate: (db, version) async {
           await db.execute('''
             CREATE TABLE knowledge(
@@ -46,9 +47,31 @@ class MemoryStore {
               created_at TEXT NOT NULL
             )
           ''');
+          await _ensurePersonalityTable(db);
+        },
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await _ensurePersonalityTable(db);
+          }
         },
       ),
     );
+  }
+
+  static Future<void> _ensurePersonalityTable(dynamic db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS personality_state(
+        slot INTEGER PRIMARY KEY,
+        mood TEXT NOT NULL,
+        energy REAL NOT NULL,
+        warmth REAL NOT NULL,
+        sass REAL NOT NULL,
+        playfulness REAL NOT NULL,
+        tenderness REAL NOT NULL,
+        patience REAL NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    ''');
   }
 
   Future<int> purgeSimulatedKnowledge() async {
@@ -93,6 +116,29 @@ class MemoryStore {
               createdAt: DateTime.tryParse(row['created_at'] as String),
             ))
         .toList();
+  }
+
+  Future<PersonalityState?> loadPersonalityState() async {
+    final db = _db;
+    if (db == null) throw StateError('MemoryStore is not open');
+    final List<Map<String, Object?>> rows = await db.query(
+      'personality_state',
+      where: 'slot = ?',
+      whereArgs: const [1],
+      limit: 1,
+    );
+    if (rows.isEmpty) return null;
+    return PersonalityState.fromDbMap(rows.first);
+  }
+
+  Future<void> savePersonalityState(PersonalityState state) async {
+    final db = _db;
+    if (db == null) throw StateError('MemoryStore is not open');
+    await db.insert(
+      'personality_state',
+      state.toDbMap(),
+      conflictAlgorithm: mobile.ConflictAlgorithm.replace,
+    );
   }
 
   Future<void> logPulse(int pulse, String phase, double coreMass) async {

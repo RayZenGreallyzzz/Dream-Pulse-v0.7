@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:llama_flutter_android/llama_flutter_android.dart';
 
 import 'brain_backend.dart';
+import 'response_sanitizer.dart';
 
 class LocalQwenBackend extends ChangeNotifier implements BrainBackend {
   LocalQwenBackend();
@@ -40,8 +41,6 @@ class LocalQwenBackend extends ChangeNotifier implements BrainBackend {
       final gpu = await _controller.detectGpu();
       freeRamMb = gpu.freeRamBytes > 0 ? gpu.freeRamBytes ~/ (1024 * 1024) : 0;
 
-      // 4 GB Android profile: unified RAM means GPU offload can increase
-      // memory pressure. Keep the tablet brain deliberately conservative.
       contextSize = (smartProfile && freeRamMb >= 1800) ? 2048 : 1536;
       threads = 2;
       gpuLayers = 0;
@@ -93,6 +92,7 @@ class LocalQwenBackend extends ChangeNotifier implements BrainBackend {
 Ты работаешь внутри Dream Pulse Core: не объявляй непроверенные сведения достоверными.
 Если в запросе есть блок WEB EVIDENCE, используй его для свежих фактов и не выдумывай источники.
 Если данных недостаточно — прямо скажи об этом.
+Никогда не выводи пользователю внутренние рассуждения, chain-of-thought или служебные этапы Core.
 $switchToken
 '''.trim();
 
@@ -126,8 +126,9 @@ $switchToken
         cancelOnError: true,
       );
 
-      final answer = await completer.future;
+      final raw = await completer.future;
       await sub.cancel();
+      final answer = ResponseSanitizer.finalOnly(raw);
       if (answer.isNotEmpty) {
         _history
           ..add(ChatMessage(role: 'user', content: prompt))

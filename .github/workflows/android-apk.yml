@@ -71,23 +71,32 @@ jobs:
           grep -q "version: 0.8.2+10" pubspec.yaml
           rm -rf patches/v082
 
-      - name: Apply v0.9 live Dream Pulse Core
+      - name: Apply v0.9.1 live Core, personality and voice architecture
         run: |
-          mkdir -p lib/core lib/llm lib/net lib/storage lib/ui
+          mkdir -p lib/avatar lib/core lib/llm lib/net lib/personality lib/storage lib/ui lib/voice
+          cp patches/v09/lib/avatar/speech_controller.dart lib/avatar/speech_controller.dart
           cp patches/v09/lib/core/dream_pulse_engine.dart lib/core/dream_pulse_engine.dart
           cp patches/v09/lib/core/pulse_coordinator.dart lib/core/pulse_coordinator.dart
           cp patches/v09/lib/llm/local_qwen_backend.dart lib/llm/local_qwen_backend.dart
           cp patches/v09/lib/llm/qwen_model_installer.dart lib/llm/qwen_model_installer.dart
+          cp patches/v09/lib/llm/response_sanitizer.dart lib/llm/response_sanitizer.dart
           cp patches/v09/lib/net/tablet_web_search.dart lib/net/tablet_web_search.dart
+          cp patches/v09/lib/personality/personality_engine.dart lib/personality/personality_engine.dart
+          cp patches/v09/lib/personality/personality_profile.dart lib/personality/personality_profile.dart
+          cp patches/v09/lib/personality/personality_state.dart lib/personality/personality_state.dart
           cp patches/v09/lib/storage/memory_store.dart lib/storage/memory_store.dart
           cp patches/v09/lib/ui/assistant_shell.dart lib/ui/assistant_shell.dart
           cp patches/v09/lib/ui/home_page.dart lib/ui/home_page.dart
+          cp patches/v09/lib/voice/voice_expression.dart lib/voice/voice_expression.dart
           python3 patches/v09/patch.py
           python3 patches/v09/patch_pubspec.py
-          grep -q "version: 0.9.0+11" pubspec.yaml
+          grep -q "version: 0.9.1+12" pubspec.yaml
           grep -q "Qwen3-0.6B-Q4_0.gguf" lib/llm/qwen_model_installer.dart
           grep -q "da2572f16c06133561ce56accaa822216f2391ef4d37fba427801cd6736417d4" lib/llm/qwen_model_installer.dart
           grep -q "class PulseCoordinator" lib/core/pulse_coordinator.dart
+          grep -q "class PersonalityEngine" lib/personality/personality_engine.dart
+          grep -q "class ResponseSanitizer" lib/llm/response_sanitizer.dart
+          grep -q "personality_state" lib/storage/memory_store.dart
           grep -q "html.duckduckgo.com" lib/net/tablet_web_search.dart
           grep -q "usesCleartextTraffic" scripts/bootstrap_android.sh
           rm -rf patches/v09
@@ -137,7 +146,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.9-live-core-arm64-apk
+          name: dream-pulse-v0.9.1-personality-live-core-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14

@@ -8,6 +8,7 @@ import '../llm/brain_router.dart';
 import '../llm/local_qwen_backend.dart';
 import '../llm/qwen_model_installer.dart';
 import '../net/tablet_web_search.dart';
+import '../personality/personality_engine.dart';
 import '../storage/memory_store.dart';
 import '../voice/voice_input_controller.dart';
 import 'assistant_page.dart';
@@ -30,6 +31,7 @@ class _AssistantShellState extends State<AssistantShell> {
   late final BrainRouter brain;
   late final DreamPulseEngine engine;
   late final MemoryStore memory;
+  late final PersonalityEngine personality;
   late final PulseCoordinator core;
   int index = 0;
 
@@ -44,11 +46,13 @@ class _AssistantShellState extends State<AssistantShell> {
     brain = BrainRouter(local: localBrain);
     engine = DreamPulseEngine();
     memory = MemoryStore();
+    personality = PersonalityEngine();
     core = PulseCoordinator(
       engine: engine,
       memory: memory,
       brain: brain,
       webSearch: TabletWebSearch(),
+      personality: personality,
     );
     speech.init();
     voiceInput.init();
@@ -64,6 +68,7 @@ class _AssistantShellState extends State<AssistantShell> {
     localBrain.unload();
     core.close();
     installer.dispose();
+    personality.dispose();
     engine.dispose();
     session.dispose();
     super.dispose();
@@ -103,14 +108,14 @@ class _AssistantShellState extends State<AssistantShell> {
                     style: TextStyle(fontSize: 16, fontWeight: FontWeight.w900, letterSpacing: 1.8),
                   ),
                   Text(
-                    'ANDROID CORE // v0.9 LIVE',
+                    'ANDROID CORE // v0.9.1 LIVE',
                     style: TextStyle(fontSize: 9, letterSpacing: 1.2, color: Color(0xFF8992A5)),
                   ),
                 ],
               ),
             ),
             AnimatedBuilder(
-              animation: Listenable.merge([localBrain, core, engine]),
+              animation: Listenable.merge([localBrain, core, engine, personality]),
               builder: (_, __) => Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 5),
                 decoration: BoxDecoration(
@@ -120,7 +125,11 @@ class _AssistantShellState extends State<AssistantShell> {
                   ),
                 ),
                 child: Text(
-                  engine.running ? engine.phase : (localBrain.ready ? 'CORE + QWEN' : 'CORE'),
+                  engine.running
+                      ? engine.phase
+                      : (localBrain.ready
+                          ? 'CORE + QWEN · ${personality.moodLabel.toUpperCase()}'
+                          : 'CORE · ${personality.moodLabel.toUpperCase()}'),
                   style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w800, letterSpacing: .7),
                 ),
               ),
