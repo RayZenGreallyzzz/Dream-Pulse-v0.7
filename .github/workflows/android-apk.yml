@@ -11,6 +11,7 @@ on:
       - 'patches/v082/**'
       - 'patches/v09/**'
       - 'patches/v092/**'
+      - 'patches/v093/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -117,6 +118,19 @@ jobs:
           grep -q "NEURAL // ELEVENLABS" lib/ui/assistant_page.dart
           rm -rf patches/v092
 
+      - name: Apply v0.9.3 local Silero Baya via RuVoice
+        run: |
+          cp patches/v093/lib/avatar/speech_controller.dart lib/avatar/speech_controller.dart
+          python3 patches/v093/patch.py
+          python3 patches/v093/patch_android.py
+          python3 patches/v093/patch_pubspec.py
+          grep -q "version: 0.9.3+14" pubspec.yaml
+          grep -q "ru.kost.ruvoice" lib/avatar/speech_controller.dart
+          grep -q "baya-ru" lib/avatar/speech_controller.dart
+          grep -q "LOCAL // SILERO BAYA" lib/ui/assistant_page.dart
+          grep -q "android.intent.action.TTS_SERVICE" scripts/bootstrap_android.sh
+          rm -rf patches/v093
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -150,6 +164,7 @@ jobs:
           rm -f test/widget_test.dart
           grep -q 'com.dreampulse.assistant' android/app/build.gradle.kts
           grep -q 'usesCleartextTraffic="true"' android/app/src/main/AndroidManifest.xml
+          grep -q 'android.intent.action.TTS_SERVICE' android/app/src/main/AndroidManifest.xml
           test -f android/app/dream-pulse-test.jks
           test -f android/app/src/main/res/drawable/dream_pulse_icon.xml
 
@@ -162,7 +177,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.9.2-neural-voice-live-core-arm64-apk
+          name: dream-pulse-v0.9.3-baya-local-live-core-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
