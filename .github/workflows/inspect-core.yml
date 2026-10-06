@@ -1,0 +1,42 @@
+name: Inspect Dream Pulse Core
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/inspect-core.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore source
+        run: |
+          cat ci/v08m.part.00 ci/v08m.part.01 ci/v08m.part.02 > /tmp/v08.b64
+          base64 -d /tmp/v08.b64 > /tmp/v08.tar.gz
+          tar -xzf /tmp/v08.tar.gz -C .
+      - name: Print core integration surface
+        run: |
+          echo '===== core files ====='
+          find lib/core lib/memory -maxdepth 3 -type f 2>/dev/null | sort || true
+          for f in \
+            lib/core/dream_pulse_engine.dart \
+            lib/core/critic_ring.dart \
+            lib/core/pulse_node.dart \
+            lib/core/world_network.dart \
+            lib/memory/memory_store.dart \
+            lib/memory/sqlite_memory.dart \
+            lib/ui/assistant_shell.dart \
+            lib/ui/assistant_page.dart; do
+            if [ -f "$f" ]; then
+              echo "===== $f ====="
+              sed -n '1,360p' "$f"
+            fi
+          done
+          echo '===== references ====='
+          grep -RniE 'DreamPulseEngine|CriticRing|Worker|Processor|Memory|absorb|pulse|assimil|worldTick|learn|remember' lib/core lib/memory lib/ui lib/llm 2>/dev/null | head -500 || true
