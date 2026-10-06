@@ -15,6 +15,7 @@ on:
       - 'patches/v094/**'
       - 'patches/v095/**'
       - 'patches/v096/**'
+      - 'patches/v097/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -174,6 +175,23 @@ jobs:
           grep -q "Qwen FAST" lib/llm/local_qwen_backend.dart
           rm -rf patches/v096
 
+      - name: Apply v0.9.7 SMART DeepSeek and web worker
+        run: |
+          mkdir -p lib/core lib/llm lib/net
+          cp patches/v097/lib/llm/qwen_model_installer.dart lib/llm/qwen_model_installer.dart
+          cp patches/v097/lib/llm/local_qwen_backend.dart lib/llm/local_qwen_backend.dart
+          cp patches/v097/lib/core/pulse_coordinator.dart lib/core/pulse_coordinator.dart
+          cp patches/v097/lib/net/tablet_web_search.dart lib/net/tablet_web_search.dart
+          python3 patches/v097/patch.py
+          python3 patches/v097/patch_pubspec.py
+          grep -q "version: 0.9.7+18" pubspec.yaml
+          grep -q "DeepSeek-R1-Distill-Qwen-1.5B-Q4_K_M.gguf" lib/llm/qwen_model_installer.dart
+          grep -q "1741e5b2d062b07acf048bf0d2c514dadf2a48f94e2b4aa0cfe069af3838ee2f" lib/llm/qwen_model_installer.dart
+          grep -q "DeepSeek R1 1.5B SMART" lib/llm/local_qwen_backend.dart
+          grep -q "www.bing.com" lib/net/tablet_web_search.dart
+          grep -q "УСТАНОВИТЬ DEEPSEEK 1.5B SMART" lib/ui/launch_gate.dart
+          rm -rf patches/v097
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -232,7 +250,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.9.6-fast-qwen-baya-arm64-apk
+          name: dream-pulse-v0.9.7-smart-deepseek-baya-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
