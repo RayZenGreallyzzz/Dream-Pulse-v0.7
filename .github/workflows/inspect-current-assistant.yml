@@ -1,0 +1,100 @@
+name: Inspect current assistant page
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/inspect-current-assistant.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Restore and apply patches
+        run: |
+          cat ci/v08m.part.00 ci/v08m.part.01 ci/v08m.part.02 > /tmp/v08.b64
+          base64 -d /tmp/v08.b64 > /tmp/v08.tar.gz
+          tar -xzf /tmp/v08.tar.gz -C .
+
+          cp patches/v08/lib/main.dart lib/main.dart
+          cp patches/v08/lib/ui/avatar_page.dart lib/ui/avatar_page.dart
+          python3 patches/v08/patch.py
+
+          cp patches/v081/lib/main.dart lib/main.dart
+          cp patches/v081/lib/llm/qwen_model_installer.dart lib/llm/qwen_model_installer.dart
+          cp patches/v081/lib/ui/launch_gate.dart lib/ui/launch_gate.dart
+          cp patches/v081/lib/ui/assistant_shell.dart lib/ui/assistant_shell.dart
+          cp patches/v081/scripts/bootstrap_android.sh scripts/bootstrap_android.sh
+          python3 patches/v081/patch_pubspec.py
+
+          cp patches/v082/lib/llm/local_qwen_backend.dart lib/llm/local_qwen_backend.dart
+          cp patches/v082/lib/ui/assistant_shell.dart lib/ui/assistant_shell.dart
+          python3 patches/v082/patch_pubspec.py
+
+          mkdir -p lib/avatar lib/core lib/llm lib/net lib/personality lib/storage lib/ui lib/voice
+          cp patches/v09/lib/avatar/speech_controller.dart lib/avatar/speech_controller.dart
+          cp patches/v09/lib/core/dream_pulse_engine.dart lib/core/dream_pulse_engine.dart
+          cp patches/v09/lib/core/pulse_coordinator.dart lib/core/pulse_coordinator.dart
+          cp patches/v09/lib/llm/local_qwen_backend.dart lib/llm/local_qwen_backend.dart
+          cp patches/v09/lib/llm/qwen_model_installer.dart lib/llm/qwen_model_installer.dart
+          cp patches/v09/lib/llm/response_sanitizer.dart lib/llm/response_sanitizer.dart
+          cp patches/v09/lib/net/tablet_web_search.dart lib/net/tablet_web_search.dart
+          cp patches/v09/lib/personality/personality_engine.dart lib/personality/personality_engine.dart
+          cp patches/v09/lib/personality/personality_profile.dart lib/personality/personality_profile.dart
+          cp patches/v09/lib/personality/personality_state.dart lib/personality/personality_state.dart
+          cp patches/v09/lib/storage/memory_store.dart lib/storage/memory_store.dart
+          cp patches/v09/lib/ui/assistant_shell.dart lib/ui/assistant_shell.dart
+          cp patches/v09/lib/ui/home_page.dart lib/ui/home_page.dart
+          cp patches/v09/lib/voice/voice_expression.dart lib/voice/voice_expression.dart
+          python3 patches/v09/patch.py
+          python3 patches/v09/patch_pubspec.py
+
+          cp patches/v092/lib/avatar/speech_controller.dart lib/avatar/speech_controller.dart
+          cp patches/v092/lib/voice/voice_expression.dart lib/voice/voice_expression.dart
+          cp patches/v092/lib/voice/elevenlabs_voice_backend.dart lib/voice/elevenlabs_voice_backend.dart
+          python3 patches/v092/patch.py
+          python3 patches/v092/patch_pubspec.py
+
+          cp patches/v093/lib/avatar/speech_controller.dart lib/avatar/speech_controller.dart
+          python3 patches/v093/patch.py
+          python3 patches/v093/patch_android.py
+          python3 patches/v093/patch_pubspec.py
+
+          cp patches/v094/lib/llm/local_qwen_backend.dart lib/llm/local_qwen_backend.dart
+          cp patches/v094/lib/llm/brain_router.dart lib/llm/brain_router.dart
+          cp patches/v094/lib/core/pulse_coordinator.dart lib/core/pulse_coordinator.dart
+          python3 patches/v094/patch.py
+          python3 patches/v094/patch_pubspec.py
+
+          cp patches/v095/lib/llm/local_qwen_backend.dart lib/llm/local_qwen_backend.dart
+          cp patches/v095/lib/avatar/speech_controller.dart lib/avatar/speech_controller.dart
+          python3 patches/v095/patch.py
+          python3 patches/v095/patch_pubspec.py
+
+          cp patches/v096/lib/llm/local_qwen_backend.dart lib/llm/local_qwen_backend.dart
+          python3 patches/v096/patch.py
+          python3 patches/v096/patch_pubspec.py
+
+          cp patches/v097/lib/llm/qwen_model_installer.dart lib/llm/qwen_model_installer.dart
+          cp patches/v097/lib/llm/local_qwen_backend.dart lib/llm/local_qwen_backend.dart
+          cp patches/v097/lib/core/pulse_coordinator.dart lib/core/pulse_coordinator.dart
+          cp patches/v097/lib/net/tablet_web_search.dart lib/net/tablet_web_search.dart
+          python3 patches/v097/patch.py
+          python3 patches/v097/patch_pubspec.py
+
+          cp patches/v098/lib/ui/home_page.dart lib/ui/home_page.dart
+          python3 patches/v098/patch.py
+          python3 patches/v098/patch_pubspec.py
+
+      - name: Print current assistant sources
+        run: |
+          echo '===== ASSISTANT PAGE ====='
+          sed -n '1,900p' lib/ui/assistant_page.dart
+          echo '===== VOICE INPUT ====='
+          sed -n '1,260p' lib/voice/voice_input_controller.dart
+          echo '===== BRAIN BACKEND ====='
+          sed -n '1,180p' lib/llm/brain_backend.dart
