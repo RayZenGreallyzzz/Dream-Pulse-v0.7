@@ -85,6 +85,7 @@ class MainActivity : FlutterActivity() {
                     result.success(
                         mapOf(
                             "modelPresent" to localVoice.modelPresent(),
+                            "voiceDir" to localVoice.voiceDir().absolutePath,
                             "engine" to "DreamPulseVoice",
                             "systemTts" to false,
                             "voices" to listOf("baya", "kseniya"),
