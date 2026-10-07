@@ -23,6 +23,7 @@ on:
       - 'patches/v0103/**'
       - 'patches/v011/**'
       - 'patches/v0111/**'
+      - 'patches/v012/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -311,6 +312,20 @@ jobs:
           grep -q "System Female" lib/avatar/speech_controller.dart
           rm -rf patches/v0111
 
+      - name: Apply v0.12 private Dream Pulse Voice
+        run: |
+          mkdir -p lib/avatar lib/voice lib/ui
+          cp patches/v012/lib/voice/dream_pulse_voice_backend.dart lib/voice/dream_pulse_voice_backend.dart
+          cp patches/v012/lib/avatar/speech_controller.dart lib/avatar/speech_controller.dart
+          cp patches/v012/lib/ui/assistant_page.dart lib/ui/assistant_page.dart
+          python3 patches/v012/patch.py
+          grep -q "version: 0.12.0+26" pubspec.yaml
+          grep -q "class DreamPulseVoiceBackend" lib/voice/dream_pulse_voice_backend.dart
+          grep -q "Dream Pulse Voice" lib/ui/assistant_page.dart
+          grep -q "Baya" lib/avatar/speech_controller.dart
+          grep -q "Kseniya" lib/avatar/speech_controller.dart
+          ! grep -q "flutter_tts:" pubspec.yaml
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -367,6 +382,41 @@ jobs:
           grep -q 'MediaMetadataRetriever' android/app/src/main/kotlin/com/dreampulse/assistant/MainActivity.kt
           rm -rf patches/v011
 
+      - name: Install private Silero voice runtime
+        run: |
+          mkdir -p android/app/src/main/kotlin/com/dreampulse/assistant
+          mkdir -p android/app/src/main/assets/silero
+          mkdir -p android/app/src/main/assets/licenses
+          mkdir -p android/app/libs
+
+          cp patches/v012/android/MainActivity.kt android/app/src/main/kotlin/com/dreampulse/assistant/MainActivity.kt
+          cp patches/v012/android/DreamPulseVoiceEngine.kt android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseVoiceEngine.kt
+          cp patches/v012/android/silero_model_license.txt android/app/src/main/assets/licenses/silero_v5_5_ru.txt
+          python3 patches/v012/patch_android.py
+
+          curl -L --fail --retry 3             -o /tmp/ruvoice-full.apk             https://github.com/kost-t-human/ruvoice-tts/releases/download/v0.18.4/ruvoice-tts-0.18.4.apk
+
+          for asset in accentor.ptl backbone.pte head.ptl tts_mel.ptl; do
+            unzip -p /tmp/ruvoice-full.apk "assets/silero/$asset"               > "android/app/src/main/assets/silero/$asset"
+            test -s "android/app/src/main/assets/silero/$asset"
+          done
+
+          curl -L --fail --retry 3             -o /tmp/executorch.aar             https://ossci-android.s3.amazonaws.com/executorch/release/1.5.0-xnnpack/executorch.aar
+          rm -rf /tmp/executorch-aar
+          mkdir -p /tmp/executorch-aar
+          (cd /tmp/executorch-aar && unzip -q /tmp/executorch.aar)
+          mkdir -p /tmp/executorch-aar/jni/arm64-v8a
+          unzip -p /tmp/ruvoice-full.apk lib/arm64-v8a/libexecutorch.so             > /tmp/executorch-aar/jni/arm64-v8a/libexecutorch.so
+          test -s /tmp/executorch-aar/jni/arm64-v8a/libexecutorch.so
+          (cd /tmp/executorch-aar && zip -q -r "$GITHUB_WORKSPACE/android/app/libs/executorch-1.5.0-xnnpack.aar" .)
+
+          grep -q 'dream_pulse/voice' android/app/src/main/kotlin/com/dreampulse/assistant/MainActivity.kt
+          grep -q 'class DreamPulseVoiceEngine' android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseVoiceEngine.kt
+          grep -q 'pytorch_android_lite:2.1.0' android/app/build.gradle.kts
+          ! grep -q 'android.intent.action.TTS_SERVICE' android/app/src/main/AndroidManifest.xml
+          du -h android/app/src/main/assets/silero/*
+          rm -rf patches/v012
+
       - name: Flutter analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
@@ -376,7 +426,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.11.1-natural-female-voice-arm64-apk
+          name: dream-pulse-v0.12-private-silero-baya-kseniya-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
