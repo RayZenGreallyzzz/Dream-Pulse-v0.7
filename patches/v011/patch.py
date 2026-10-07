@@ -10,17 +10,16 @@ deps = {
     'url_launcher:': '  url_launcher: ^6.3.1\n',
 }
 
-anchor = 'dependencies:\n  flutter:\n    sdk: flutter\n'
-if anchor not in s:
-    raise SystemExit('pubspec dependencies anchor not found')
-
 insert = ''
 for key, line in deps.items():
     if key not in s:
         insert += line
 
 if insert:
-    s = s.replace(anchor, anchor + insert)
+    marker = 'dependencies:\n'
+    if marker not in s:
+        raise SystemExit('pubspec dependencies section not found')
+    s = s.replace(marker, marker + insert, 1)
 
 lines = s.splitlines()
 lines = ['version: 0.11.0+24' if line.startswith('version:') else line for line in lines]
