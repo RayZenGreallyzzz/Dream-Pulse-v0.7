@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
@@ -176,7 +177,7 @@ class DreamPulseVoiceBackend {
       if (response.statusCode != HttpStatus.ok) {
         throw HttpException('HTTP ${response.statusCode}');
       }
-      return response.transform(const SystemEncoding().decoder).join();
+      return response.transform(utf8.decoder).join();
     } finally {
       client.close(force: true);
     }
