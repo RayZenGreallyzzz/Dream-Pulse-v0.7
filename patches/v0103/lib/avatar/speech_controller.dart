@@ -92,13 +92,14 @@ class SpeechController {
 
       if (!ruVoiceActive) {
         await refreshVoices();
-        if (voiceOptions.isNotEmpty) {
-          await selectVoice(voiceOptions.first);
+        final female = _bestFemaleVoice();
+        if (female != null) {
+          await selectVoice(female);
           ruVoiceStatus = ruVoiceAvailable
-              ? 'Baya недоступна · системный русский голос активен'
-              : 'RuVoice не найден · системный русский голос активен';
+              ? 'Baya недоступна · женский системный голос активен'
+              : 'RuVoice не найден · женский системный голос активен';
         } else {
-          ruVoiceStatus = 'Русский TTS-голос не найден в Android';
+          ruVoiceStatus = 'Женский русский TTS-голос не найден в Android';
         }
       }
 
@@ -177,8 +178,13 @@ class SpeechController {
     ruVoiceActive = false;
     await _tts.setLanguage('ru-RU');
     await refreshVoices();
-    if (voiceOptions.isNotEmpty) {
-      await selectVoice(voiceOptions.first);
+    final female = _bestFemaleVoice();
+    if (female != null) {
+      await selectVoice(female);
+      ruVoiceStatus = 'Женский системный голос активен';
+    } else {
+      ruVoiceStatus = 'Женский русский TTS-голос не найден';
+      throw StateError('Женский русский TTS-голос не найден');
     }
   }
 
@@ -207,11 +213,58 @@ class SpeechController {
     }
   }
 
+  VoiceOption? _bestFemaleVoice() {
+    for (final voice in voiceOptions) {
+      if (_isFemaleVoice(voice)) return voice;
+    }
+    return null;
+  }
+
+  bool _isFemaleVoice(VoiceOption option) {
+    final name = option.name.toLowerCase();
+    const femaleHints = <String>[
+      'baya',
+      'kseniya',
+      'xenia',
+      'female',
+      'fem',
+      'жен',
+      'alena',
+      'alyona',
+      'елена',
+      'алена',
+      'алёна',
+      'irina',
+      'ирина',
+      'anna',
+      'анна',
+      'marina',
+      'марина',
+      'milena',
+      'милена',
+      'svetlana',
+      'светлана',
+      'victoria',
+      'viktoria',
+      'виктория',
+      'tatiana',
+      'tatyana',
+      'татьяна',
+      'daria',
+      'дарья',
+      'natalia',
+      'наталья',
+      'olga',
+      'ольга',
+    ];
+    return femaleHints.any(name.contains);
+  }
+
   int _voiceScore(VoiceOption option) {
     final name = option.name.toLowerCase();
     var score = 0;
     if (name == 'baya-ru' || name.startsWith('baya')) score += 120;
-    if (name.contains('female') || name.contains('fem') || name.contains('жен')) score += 50;
+    if (_isFemaleVoice(option)) score += 80;
     if (name.contains('network') || name.contains('neural') || name.contains('enhanced')) score += 25;
     if (name.contains('natural') || name.contains('premium')) score += 20;
     if (name.contains('local')) score += 4;
