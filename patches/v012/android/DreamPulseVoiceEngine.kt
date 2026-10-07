@@ -68,6 +68,7 @@ class DreamPulseVoiceEngine(private val context: Context) {
                 ensureLoaded()
                 // Run only the light accentor on warmup. Full synthesis stays lazy.
                 accentWords(listOf("привет"))
+                Unit
             })
         }
     }
@@ -307,7 +308,7 @@ class DreamPulseVoiceEngine(private val context: Context) {
         var text = raw
             .replace('—', '–')
             .replace('−', '-')
-            .replace('’', ''')
+            .replace('’', ' ')
             .replace('“', ' ')
             .replace('”', ' ')
             .replace('«', ' ')
