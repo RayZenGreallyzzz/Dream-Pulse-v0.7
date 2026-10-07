@@ -257,7 +257,7 @@ class SpeechController {
   }
 
   Future<void> selectNeuralVoice(NeuralVoiceOption option) async {
-    requireRuVoice = false;
+    preferRuVoice = false;
     ruVoiceActive = false;
     await _neural.selectVoice(option);
     lastNeuralError = '';
@@ -265,7 +265,7 @@ class SpeechController {
 
   Future<void> selectNeuralVoiceId(String voiceId) async {
     try {
-      requireRuVoice = false;
+      preferRuVoice = false;
       ruVoiceActive = false;
       await _neural.selectVoiceId(voiceId);
       lastNeuralError = '';
@@ -277,7 +277,7 @@ class SpeechController {
 
   Future<void> setNeuralEnabled(bool enabled) async {
     if (enabled) {
-      requireRuVoice = false;
+      preferRuVoice = false;
       ruVoiceActive = false;
     }
     await _neural.setEnabled(enabled);
