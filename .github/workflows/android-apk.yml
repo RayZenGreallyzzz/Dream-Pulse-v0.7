@@ -294,8 +294,9 @@ jobs:
           grep -q "class ToolRegistry" lib/tools/tool_registry.dart
           grep -q "attachments: attachments" lib/core/pulse_coordinator.dart
           grep -q "image_picker:" pubspec.yaml
-          grep -q "video_thumbnail:" pubspec.yaml
-          rm -rf patches/v011
+          grep -q "file_picker:" pubspec.yaml
+          grep -q "url_launcher:" pubspec.yaml
+          grep -q "MethodChannel('dream_pulse/media')" lib/tools/tool_registry.dart
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -345,6 +346,13 @@ jobs:
           grep -q 'android.intent.action.TTS_SERVICE' android/app/src/main/AndroidManifest.xml
           test -f android/app/dream-pulse-test.jks
           test -f android/app/src/main/res/drawable/dream_pulse_icon.xml
+
+      - name: Install v0.11 native video bridge
+        run: |
+          python3 patches/v011/patch_android.py
+          grep -q 'dream_pulse/media' android/app/src/main/kotlin/com/dreampulse/assistant/MainActivity.kt
+          grep -q 'MediaMetadataRetriever' android/app/src/main/kotlin/com/dreampulse/assistant/MainActivity.kt
+          rm -rf patches/v011
 
       - name: Flutter analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
