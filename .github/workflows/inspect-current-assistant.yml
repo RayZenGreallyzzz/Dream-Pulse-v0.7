@@ -61,7 +61,6 @@ jobs:
 
           cp patches/v093/lib/avatar/speech_controller.dart lib/avatar/speech_controller.dart
           python3 patches/v093/patch.py
-          python3 patches/v093/patch_android.py
           python3 patches/v093/patch_pubspec.py
 
           cp patches/v094/lib/llm/local_qwen_backend.dart lib/llm/local_qwen_backend.dart
