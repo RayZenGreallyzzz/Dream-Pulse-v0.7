@@ -52,11 +52,10 @@ class DreamPulseVoiceEngine(private val context: Context) {
     private val symbolToId = SYMBOLS.mapIndexed { i, c -> c to i }.toMap()
     private val threads = min(4, max(2, Runtime.getRuntime().availableProcessors() / 2))
 
-    private val installedModelDir: File
-        get() = File(context.filesDir, "dream-pulse-voice/model")
+    fun voiceDir(): File = File(context.filesDir, "dream-pulse-voice")
 
     fun modelPresent(): Boolean {
-        val dir = installedModelDir
+        val dir = voiceDir()
         return listOf("tts_mel.ptl", "head.ptl", "accentor.ptl", "backbone.pte")
             .all { File(dir, it).let { f -> f.isFile && f.length() > 1024L } }
     }
@@ -137,7 +136,7 @@ class DreamPulseVoiceEngine(private val context: Context) {
         check(modelPresent()) { "Silero model assets are missing" }
 
         LitePyTorchAndroid.setNumThreads(threads)
-        val dir = installedModelDir
+        val dir = voiceDir()
         accentor = LiteModuleLoader.load(File(dir, "accentor.ptl").absolutePath)
         mel = LiteModuleLoader.load(File(dir, "tts_mel.ptl").absolutePath)
         head = LiteModuleLoader.load(File(dir, "head.ptl").absolutePath)
