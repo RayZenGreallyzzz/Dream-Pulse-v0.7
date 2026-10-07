@@ -64,6 +64,9 @@ class SpeechController {
     return _systemVoiceLabel;
   }
 
+  List<VoiceOption> get femaleVoiceOptions =>
+      voiceOptions.where(_isFemaleVoice).toList(growable: false);
+
   bool get neuralEnabled => _neural.enabled;
   bool get neuralConfigured => _neural.configured;
   bool get neuralHasApiKey => _neural.hasApiKey;
