@@ -16,6 +16,7 @@ on:
       - 'patches/v095/**'
       - 'patches/v096/**'
       - 'patches/v097/**'
+      - 'patches/v098/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -192,6 +193,18 @@ jobs:
           grep -q "УСТАНОВИТЬ DEEPSEEK 1.5B SMART" lib/ui/launch_gate.dart
           rm -rf patches/v097
 
+      - name: Apply v0.9.8 truthful live Core telemetry
+        run: |
+          mkdir -p lib/ui
+          cp patches/v098/lib/ui/home_page.dart lib/ui/home_page.dart
+          python3 patches/v098/patch.py
+          python3 patches/v098/patch_pubspec.py
+          grep -q "version: 0.9.8+19" pubspec.yaml
+          grep -q "IDLE · STATIC" lib/ui/home_page.dart
+          grep -q "BACKEND" lib/ui/home_page.dart
+          grep -q "REAL TASKS ONLY" lib/ui/home_page.dart
+          rm -rf patches/v098
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -250,7 +263,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.9.7-smart-deepseek-baya-arm64-apk
+          name: dream-pulse-v0.9.8-live-trace-smart-deepseek-baya-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
