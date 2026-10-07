@@ -699,7 +699,7 @@ class _AssistantPageState extends State<AssistantPage> {
 
   Future<void> _pickFile() async {
     try {
-      final result = await FilePicker.platform.pickFiles(type: FileType.any);
+      final result = await FilePicker.pickFiles(type: FileType.any);
       if (result == null || result.files.isEmpty || !mounted) return;
       final picked = result.files.first;
       final path = picked.path;
