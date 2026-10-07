@@ -21,6 +21,7 @@ on:
       - 'patches/v0101/**'
       - 'patches/v0102/**'
       - 'patches/v0103/**'
+      - 'patches/v011/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -280,6 +281,22 @@ jobs:
           grep -q "Baya · локальный женский голос" lib/ui/assistant_page.dart
           rm -rf patches/v0103
 
+      - name: Apply v0.11 tools and attachments
+        run: |
+          mkdir -p lib/tools lib/core lib/ui
+          cp patches/v011/lib/tools/attachments.dart lib/tools/attachments.dart
+          cp patches/v011/lib/tools/tool_registry.dart lib/tools/tool_registry.dart
+          cp patches/v011/lib/core/pulse_coordinator.dart lib/core/pulse_coordinator.dart
+          cp patches/v011/lib/ui/assistant_page.dart lib/ui/assistant_page.dart
+          cp patches/v011/lib/ui/assistant_shell.dart lib/ui/assistant_shell.dart
+          python3 patches/v011/patch.py
+          grep -q "version: 0.11.0+24" pubspec.yaml
+          grep -q "class ToolRegistry" lib/tools/tool_registry.dart
+          grep -q "attachments: attachments" lib/core/pulse_coordinator.dart
+          grep -q "image_picker:" pubspec.yaml
+          grep -q "video_thumbnail:" pubspec.yaml
+          rm -rf patches/v011
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -338,7 +355,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.10.3-female-voice-fixed-arm64-apk
+          name: dream-pulse-v0.11-tools-vision-video-sources-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
