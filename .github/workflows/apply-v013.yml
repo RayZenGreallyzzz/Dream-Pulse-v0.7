@@ -1,0 +1,102 @@
+name: Apply v0.13 Build Migration
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/apply-v013.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Patch Android build workflow
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p = Path('.github/workflows/android-apk.yml')
+          s = p.read_text()
+
+          if "      - 'patches/v013/**'" not in s:
+              s = s.replace(
+                  "      - 'patches/v0121/**'\n",
+                  "      - 'patches/v0121/**'\n      - 'patches/v013/**'\n",
+                  1,
+              )
+
+          if 'Apply v0.13 detachable voice pack' not in s:
+              marker = '      - name: Set up Java 17\n'
+              block = '''      - name: Apply v0.13 detachable voice pack
+                run: |
+                  mkdir -p lib/voice
+                  cp patches/v013/lib/voice/dream_pulse_voice_backend.dart lib/voice/dream_pulse_voice_backend.dart
+                  python3 patches/v013/patch.py
+                  grep -q "version: 0.13.0+29" pubspec.yaml
+                  grep -q "bool autoSpeak = false;" lib/ui/assistant_page.dart
+                  grep -q "installLocalVoice" lib/avatar/speech_controller.dart
+                  grep -q "crypto:" pubspec.yaml
+
+          '''
+              s = s.replace(marker, block + marker, 1)
+
+          s = s.replace('          mkdir -p android/app/src/main/assets/silero\n', '')
+
+          s = re.sub(
+              r'''\n          for asset in accentor\.ptl backbone\.pte head\.ptl tts_mel\.ptl; do\n.*?\n          done\n''',
+              '\n',
+              s,
+              count=1,
+              flags=re.S,
+          )
+
+          needle = '          python3 patches/v012/patch_android.py\n'
+          if 'python3 patches/v013/patch_android.py' not in s:
+              s = s.replace(
+                  needle,
+                  needle + '          python3 patches/v013/patch_android.py\n',
+                  1,
+              )
+
+          s = re.sub(
+              r'''          du -h android/app/src/main/assets/silero/\*\n''',
+              '',
+              s,
+              count=1,
+          )
+
+          s = s.replace(
+              '          rm -rf patches/v012\n',
+              '          rm -rf patches/v012 patches/v013\n',
+              1,
+          )
+
+          s = s.replace(
+              'name: dream-pulse-v0.12.1-lazy-voice-memory-fix-arm64-apk',
+              'name: dream-pulse-v0.13-light-apk-detachable-voice-pack',
+          )
+
+          p.write_text(s)
+          PY
+
+          grep -q "Apply v0.13 detachable voice pack" .github/workflows/android-apk.yml
+          grep -q "patches/v013/patch_android.py" .github/workflows/android-apk.yml
+          ! grep -q 'assets/silero/\$asset' .github/workflows/android-apk.yml
+
+      - name: Commit migration
+        run: |
+          git config user.name "Dream Pulse CI"
+          git config user.email "actions@users.noreply.github.com"
+          git add .github/workflows/android-apk.yml
+          if git diff --cached --quiet; then
+            echo "Already migrated"
+          else
+            git commit -m "Build v0.13 light APK with detachable voice pack"
+            git push
+          fi
