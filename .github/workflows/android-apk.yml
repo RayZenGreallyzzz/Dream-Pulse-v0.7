@@ -205,6 +205,15 @@ jobs:
           grep -q "REAL TASKS ONLY" lib/ui/home_page.dart
           rm -rf patches/v098
 
+      - name: Inspect current assistant source
+        run: |
+          echo "===== assistant_page.dart ====="
+          sed -n '1,420p' lib/ui/assistant_page.dart
+          echo "===== brain_router.dart ====="
+          sed -n '1,260p' lib/llm/brain_router.dart
+          echo "===== launch_gate.dart ====="
+          sed -n '1,300p' lib/ui/launch_gate.dart
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
