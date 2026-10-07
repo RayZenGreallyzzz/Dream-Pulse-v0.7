@@ -277,7 +277,7 @@ class _AssistantPageState extends State<AssistantPage> {
                       ),
                     ),
                     const SizedBox(height: 6),
-                    ...widget.speech.voiceOptions.take(8).map((voice) {
+                    ...widget.speech.femaleVoiceOptions.take(8).map((voice) {
                       final selected =
                           widget.speech.selectedVoice?.name == voice.name &&
                           !widget.speech.ruVoiceActive;
@@ -316,11 +316,11 @@ class _AssistantPageState extends State<AssistantPage> {
                         },
                       );
                     }),
-                    if (widget.speech.voiceOptions.isEmpty)
+                    if (widget.speech.femaleVoiceOptions.isEmpty)
                       const Padding(
                         padding: EdgeInsets.symmetric(vertical: 10),
                         child: Text(
-                          'Android не вернул русские TTS-голоса.',
+                          'Android не вернул женские русские TTS-голоса.',
                           style: TextStyle(
                             fontSize: 12,
                             color: Color(0xFF777B85),
