@@ -700,8 +700,8 @@ class _AssistantPageState extends State<AssistantPage> {
   Future<void> _pickFile() async {
     try {
       final result = await FilePicker.pickFiles(type: FileType.any);
-      if (result == null || result.files.isEmpty || !mounted) return;
-      final picked = result.files.first;
+      if (result.isEmpty || !mounted) return;
+      final picked = result.first;
       final path = picked.path;
       if (path == null || path.isEmpty) {
         setState(() => status = 'Файл недоступен локально');
