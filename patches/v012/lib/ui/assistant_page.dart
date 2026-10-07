@@ -1,0 +1,1548 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
+import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:url_launcher/url_launcher.dart';
+
+import '../avatar/avatar_session.dart';
+import '../avatar/speech_controller.dart';
+import '../core/pulse_coordinator.dart';
+import '../llm/brain_router.dart';
+import '../llm/deepseek_model_installer.dart';
+import '../llm/local_deepseek_backend.dart';
+import '../voice/voice_input_controller.dart';
+import '../tools/attachments.dart';
+
+class AssistantPage extends StatefulWidget {
+  const AssistantPage({
+    super.key,
+    required this.session,
+    required this.speech,
+    required this.voiceInput,
+    required this.brain,
+    required this.localBrain,
+    required this.installer,
+    required this.core,
+  });
+
+  final AvatarSession session;
+  final SpeechController speech;
+  final VoiceInputController voiceInput;
+  final BrainRouter brain;
+  final LocalDeepSeekBackend localBrain;
+  final DeepSeekModelInstaller installer;
+  final PulseCoordinator core;
+
+  @override
+  State<AssistantPage> createState() => _AssistantPageState();
+}
+
+class _AssistantPageState extends State<AssistantPage> {
+  final input = TextEditingController();
+  final messages = <_Message>[];
+  final pendingAttachments = <ChatAttachment>[];
+  final ImagePicker imagePicker = ImagePicker();
+
+  bool busy = false;
+  bool autoSpeak = true;
+  bool dialogMode = false;
+  bool thinking = false;
+  bool forceWeb = false;
+  String status = 'Dream Pulse готов';
+
+  @override
+  void initState() {
+    super.initState();
+    widget.localBrain.addListener(_syncStatus);
+    widget.brain.groq.addListener(_syncStatus);
+    widget.brain.api.addListener(_syncStatus);
+    widget.voiceInput.addListener(_syncVoice);
+    widget.installer.addListener(_syncStatus);
+  }
+
+  void _syncStatus() {
+    if (mounted) setState(() {});
+  }
+
+  void _syncVoice() {
+    if (!mounted) return;
+    if (widget.voiceInput.listening && widget.voiceInput.partial.isNotEmpty) {
+      input.text = widget.voiceInput.partial;
+      input.selection = TextSelection.collapsed(offset: input.text.length);
+    }
+    setState(() {});
+  }
+
+  bool get _thinkAvailable {
+    switch (widget.brain.mode) {
+      case BrainMode.groq:
+        return widget.brain.groq.ready;
+      case BrainMode.deepseek:
+        return widget.brain.api.ready;
+      case BrainMode.local:
+        return false;
+      case BrainMode.auto:
+        return widget.brain.groq.ready;
+    }
+  }
+
+  String get _modeLabel {
+    switch (widget.brain.mode) {
+      case BrainMode.auto:
+        return 'AUTO';
+      case BrainMode.groq:
+        return 'GROQ FREE';
+      case BrainMode.local:
+        return 'LOCAL';
+      case BrainMode.deepseek:
+        return 'DEEPSEEK';
+    }
+  }
+
+  String get _brainStatus {
+    switch (widget.brain.mode) {
+      case BrainMode.auto:
+        if (widget.brain.groq.ready) return 'GPT-OSS 120B';
+        if (widget.localBrain.ready) return 'DeepSeek 1.5B';
+        return 'настрой Groq Free';
+      case BrainMode.groq:
+        return widget.brain.groq.ready
+            ? 'GPT-OSS 120B'
+            : 'нужен Groq key';
+      case BrainMode.local:
+        if (widget.localBrain.ready) return 'DeepSeek 1.5B';
+        if (widget.installer.downloading) return widget.installer.status;
+        return widget.installer.installed
+            ? 'DeepSeek 1.5B · не загружен'
+            : 'DeepSeek 1.5B · не установлен';
+      case BrainMode.deepseek:
+        return widget.brain.api.ready
+            ? 'DeepSeek Flash'
+            : 'нужен DeepSeek key';
+    }
+  }
+
+  Future<bool> _ensureBrainReady() async {
+    if (widget.brain.mode == BrainMode.groq) {
+      if (!widget.brain.groq.ready) {
+        await _showBrainSheet();
+        return widget.brain.groq.ready;
+      }
+      return true;
+    }
+
+    if (widget.brain.mode == BrainMode.deepseek) {
+      if (!widget.brain.api.ready) {
+        await _showBrainSheet();
+        return widget.brain.api.ready;
+      }
+      return true;
+    }
+
+    if (widget.brain.mode == BrainMode.auto && widget.brain.groq.ready) {
+      return true;
+    }
+
+    if (widget.localBrain.ready) return true;
+
+    final path = await widget.installer.prepare();
+    if (path == null) {
+      await _showBrainSheet();
+      return false;
+    }
+
+    try {
+      await widget.localBrain.load(path);
+      return widget.localBrain.ready;
+    } catch (e) {
+      if (mounted) setState(() => status = 'Ошибка LOCAL · $e');
+      return false;
+    }
+  }
+
+  Future<void> _installLocal() async {
+    try {
+      final path = await widget.installer.install();
+      await widget.localBrain.load(path);
+      if (!mounted) return;
+      setState(() {
+        widget.brain.mode = BrainMode.local;
+        thinking = false;
+        status = 'DeepSeek 1.5B готов';
+      });
+    } catch (e) {
+      if (mounted) setState(() => status = 'Ошибка загрузки · $e');
+    }
+  }
+
+  Future<void> _showVoiceSheet() async {
+    if (!mounted) return;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: const Color(0xFF0D0E12),
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          Future<void> testCurrent() async {
+            try {
+              await widget.speech.previewCurrent();
+              if (sheetContext.mounted) setSheetState(() {});
+              if (mounted) {
+                setState(
+                  () => status = 'Голос работает · ${widget.speech.voiceLabel}',
+                );
+              }
+            } catch (_) {
+              if (mounted) setState(() => status = widget.speech.voiceStatus);
+              if (sheetContext.mounted) setSheetState(() {});
+            }
+          }
+
+          Future<void> chooseVoice(VoiceOption voice) async {
+            try {
+              await widget.speech.selectVoice(voice);
+              if (sheetContext.mounted) setSheetState(() {});
+              if (mounted) setState(() => status = 'Голос · ${voice.label}');
+            } catch (_) {
+              if (mounted) {
+                setState(() => status = 'Не удалось выбрать локальный голос');
+              }
+            }
+          }
+
+          Widget slider({
+            required String label,
+            required String value,
+            required double current,
+            required double min,
+            required double max,
+            required int divisions,
+            required ValueChanged<double> onChanged,
+          }) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        label,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFFB9BBC2),
+                        ),
+                      ),
+                    ),
+                    Text(
+                      value,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF8D919B),
+                      ),
+                    ),
+                  ],
+                ),
+                Slider(
+                  value: current.clamp(min, max),
+                  min: min,
+                  max: max,
+                  divisions: divisions,
+                  onChanged: (v) {
+                    onChanged(v);
+                    setSheetState(() {});
+                    if (mounted) setState(() {});
+                  },
+                ),
+              ],
+            );
+          }
+
+          return SafeArea(
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(
+                20,
+                18,
+                20,
+                MediaQuery.viewInsetsOf(context).bottom + 18,
+              ),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    const Text(
+                      'Dream Pulse Voice',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text(
+                      'Локальный модуль внутри Dream Pulse · не системный TTS. '
+                      'Другие приложения не могут отправлять ему свой текст.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        height: 1.45,
+                        color: Color(0xFF9498A3),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      widget.speech.voiceStatus,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        color: Color(0xFF777B85),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    const Text(
+                      'Голос',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFB9BBC2),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 14,
+                      children: widget.speech.voiceOptions.map((voice) {
+                        final selected =
+                            widget.speech.selectedVoice.name == voice.name;
+                        return TextButton(
+                          onPressed: () => chooseVoice(voice),
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                            minimumSize: const Size(0, 38),
+                          ),
+                          child: Text(
+                            voice.label,
+                            style: TextStyle(
+                              color: selected
+                                  ? const Color(0xFFFF7A2F)
+                                  : const Color(0xFF8D919B),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        );
+                      }).toList(),
+                    ),
+                    const SizedBox(height: 10),
+                    slider(
+                      label: 'Скорость',
+                      value: '×${widget.speech.voiceRate.toStringAsFixed(2)}',
+                      current: widget.speech.voiceRate,
+                      min: 0.70,
+                      max: 1.40,
+                      divisions: 28,
+                      onChanged: widget.speech.setRate,
+                    ),
+                    slider(
+                      label: 'Высота',
+                      value: '×${widget.speech.voicePitch.toStringAsFixed(2)}',
+                      current: widget.speech.voicePitch,
+                      min: 0.80,
+                      max: 1.20,
+                      divisions: 20,
+                      onChanged: widget.speech.setPitch,
+                    ),
+                    slider(
+                      label: 'Тембр',
+                      value: widget.speech.voiceTimbre < -0.08
+                          ? 'теплее'
+                          : widget.speech.voiceTimbre > 0.08
+                              ? 'ярче'
+                              : 'нейтральный',
+                      current: widget.speech.voiceTimbre,
+                      min: -1.0,
+                      max: 1.0,
+                      divisions: 20,
+                      onChanged: widget.speech.setTimbre,
+                    ),
+                    slider(
+                      label: 'Громкость',
+                      value: '×${widget.speech.voiceVolume.toStringAsFixed(2)}',
+                      current: widget.speech.voiceVolume,
+                      min: 0.40,
+                      max: 1.60,
+                      divisions: 24,
+                      onChanged: widget.speech.setVolume,
+                    ),
+                    slider(
+                      label: 'Пауза между фразами',
+                      value: '${widget.speech.sentencePauseMs} мс',
+                      current: widget.speech.sentencePauseMs.toDouble(),
+                      min: 0,
+                      max: 700,
+                      divisions: 28,
+                      onChanged: (v) =>
+                          widget.speech.setSentencePause(v.round()),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: testCurrent,
+                      icon: const Icon(Icons.play_arrow_rounded),
+                      label: Text('Тест · ${widget.speech.voiceLabel}'),
+                      style: TextButton.styleFrom(
+                        alignment: Alignment.centerLeft,
+                        padding: EdgeInsets.zero,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    const Text(
+                      'Модель: Silero TTS v5_5_ru · локальное выполнение. '
+                      'Доступны только Baya и Kseniya.',
+                      style: TextStyle(
+                        fontSize: 10,
+                        height: 1.4,
+                        color: Color(0xFF6F737D),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Future<void> _showBrainSheet() async {
+    if (!mounted) return;
+    final groqKey = TextEditingController();
+    final deepSeekKey = TextEditingController();
+
+    try {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: const Color(0xFF0D0E12),
+        builder: (sheetContext) => StatefulBuilder(
+          builder: (context, setSheetState) {
+            Future<void> saveGroq() async {
+              try {
+                await widget.brain.groq.saveApiKey(groqKey.text);
+                groqKey.clear();
+                widget.brain.mode = BrainMode.auto;
+                if (sheetContext.mounted) setSheetState(() {});
+                if (mounted) setState(() {});
+              } catch (e) {
+                if (mounted) setState(() => status = 'Groq · $e');
+              }
+            }
+
+            Future<void> saveDeepSeek() async {
+              try {
+                await widget.brain.api.saveApiKey(deepSeekKey.text);
+                deepSeekKey.clear();
+                widget.brain.mode = BrainMode.deepseek;
+                if (sheetContext.mounted) setSheetState(() {});
+                if (mounted) setState(() {});
+              } catch (e) {
+                if (mounted) setState(() => status = 'DeepSeek API · $e');
+              }
+            }
+
+            return SafeArea(
+              child: Padding(
+                padding: EdgeInsets.fromLTRB(
+                  20,
+                  18,
+                  20,
+                  MediaQuery.viewInsetsOf(context).bottom + 18,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      const Text(
+                        'Мозг Dream Pulse',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'AUTO бесплатно: Groq 120B → LOCAL 1.5B. Платный DeepSeek никогда не включается автоматически.',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: Color(0xFF9498A3),
+                          height: 1.45,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        spacing: 18,
+                        children: BrainMode.values.map((mode) {
+                          final selected = widget.brain.mode == mode;
+                          final label = switch (mode) {
+                            BrainMode.auto => 'AUTO',
+                            BrainMode.groq => 'GROQ',
+                            BrainMode.local => 'LOCAL',
+                            BrainMode.deepseek => 'DEEPSEEK',
+                          };
+                          return TextButton(
+                            onPressed: () {
+                              widget.brain.mode = mode;
+                              if (mode == BrainMode.local) thinking = false;
+                              setSheetState(() {});
+                              if (mounted) setState(() {});
+                            },
+                            style: TextButton.styleFrom(
+                              padding: EdgeInsets.zero,
+                              minimumSize: const Size(0, 36),
+                            ),
+                            child: Text(
+                              label,
+                              style: TextStyle(
+                                color: selected
+                                    ? const Color(0xFFFF7A2F)
+                                    : const Color(0xFF8D919B),
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'GROQ FREE · GPT-OSS 120B',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        widget.brain.groq.ready
+                            ? 'Ключ сохранён · AUTO использует Groq первым'
+                            : 'Нужен бесплатный API key с console.groq.com',
+                        style: const TextStyle(
+                          color: Color(0xFF9498A3),
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: groqKey,
+                        obscureText: true,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        decoration: const InputDecoration(
+                          hintText: 'Groq API key',
+                          filled: true,
+                          fillColor: Color(0xFF15161B),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          TextButton(
+                            onPressed: saveGroq,
+                            child: const Text('Сохранить Groq key'),
+                          ),
+                          if (widget.brain.groq.ready)
+                            TextButton(
+                              onPressed: () async {
+                                await widget.brain.groq.clearApiKey();
+                                if (sheetContext.mounted) {
+                                  setSheetState(() {});
+                                }
+                                if (mounted) setState(() {});
+                              },
+                              child: const Text('Удалить'),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      const Text(
+                        'LOCAL · DeepSeek 1.5B',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        widget.localBrain.ready
+                            ? widget.localBrain.status
+                            : widget.installer.status,
+                        style: const TextStyle(
+                          color: Color(0xFF9498A3),
+                          fontSize: 12,
+                        ),
+                      ),
+                      if (widget.installer.downloading) ...[
+                        const SizedBox(height: 10),
+                        LinearProgressIndicator(
+                          value: widget.installer.progress > 0
+                              ? widget.installer.progress
+                              : null,
+                          minHeight: 3,
+                        ),
+                      ],
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          onPressed: widget.installer.downloading
+                              ? widget.installer.cancel
+                              : _installLocal,
+                          style: TextButton.styleFrom(
+                            padding: EdgeInsets.zero,
+                          ),
+                          child: Text(
+                            widget.localBrain.ready
+                                ? 'Локальная модель загружена'
+                                : widget.installer.downloading
+                                    ? 'Остановить загрузку'
+                                    : widget.installer.installed
+                                        ? 'Загрузить в память'
+                                        : 'Скачать ~1.12 ГБ',
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 18),
+                      const Text(
+                        'DEEPSEEK API · платный · только вручную',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      Text(
+                        widget.brain.api.ready
+                            ? 'DeepSeek API key сохранён'
+                            : 'Не нужен для AUTO',
+                        style: const TextStyle(
+                          color: Color(0xFF9498A3),
+                          fontSize: 12,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: deepSeekKey,
+                        obscureText: true,
+                        autocorrect: false,
+                        enableSuggestions: false,
+                        decoration: const InputDecoration(
+                          hintText: 'DeepSeek API key',
+                          filled: true,
+                          fillColor: Color(0xFF15161B),
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                        ),
+                      ),
+                      Row(
+                        children: [
+                          TextButton(
+                            onPressed: saveDeepSeek,
+                            child: const Text('Сохранить DeepSeek key'),
+                          ),
+                          if (widget.brain.api.ready)
+                            TextButton(
+                              onPressed: () async {
+                                await widget.brain.api.clearApiKey();
+                                if (sheetContext.mounted) {
+                                  setSheetState(() {});
+                                }
+                                if (mounted) setState(() {});
+                              },
+                              child: const Text('Удалить'),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    } finally {
+      groqKey.dispose();
+      deepSeekKey.dispose();
+    }
+  }
+
+  Future<void> _showAttachmentSheet() async {
+    if (!mounted || busy) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: const Color(0xFF0D0E12),
+      builder: (sheetContext) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(18, 14, 18, 18),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.photo_outlined),
+                title: const Text('Фото из галереи'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _pickImage(ImageSource.gallery);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_camera_outlined),
+                title: const Text('Камера'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _pickImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.videocam_outlined),
+                title: const Text('Видео'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _pickVideo();
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.attach_file_rounded),
+                title: const Text('Файл'),
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _pickFile();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickImage(ImageSource source) async {
+    try {
+      final picked = await imagePicker.pickImage(
+        source: source,
+        maxWidth: 1600,
+        imageQuality: 85,
+      );
+      if (picked == null || !mounted) return;
+      setState(() {
+        pendingAttachments.add(ChatAttachment(
+          kind: AttachmentKind.image,
+          path: picked.path,
+          name: picked.name,
+        ));
+        status = 'VisionTool готов к анализу';
+      });
+    } catch (_) {
+      if (mounted) setState(() => status = 'Не удалось добавить фото');
+    }
+  }
+
+  Future<void> _pickVideo() async {
+    try {
+      final picked = await imagePicker.pickVideo(source: ImageSource.gallery);
+      if (picked == null || !mounted) return;
+      setState(() {
+        pendingAttachments.add(ChatAttachment(
+          kind: AttachmentKind.video,
+          path: picked.path,
+          name: picked.name,
+        ));
+        status = 'VideoTool готов к анализу';
+      });
+    } catch (_) {
+      if (mounted) setState(() => status = 'Не удалось добавить видео');
+    }
+  }
+
+  Future<void> _pickFile() async {
+    try {
+      final result = await FilePicker.pickFiles(type: FileType.any);
+      if (result.isEmpty || !mounted) return;
+      final picked = result.first;
+      final path = picked.path;
+      if (path == null || path.isEmpty) {
+        setState(() => status = 'Файл недоступен локально');
+        return;
+      }
+      setState(() {
+        pendingAttachments.add(ChatAttachment(
+          kind: AttachmentKind.file,
+          path: path,
+          name: picked.name,
+        ));
+        status = 'FileTool готов к анализу';
+      });
+    } catch (_) {
+      if (mounted) setState(() => status = 'Не удалось добавить файл');
+    }
+  }
+
+  Future<void> _toggleMic() async {
+    if (widget.voiceInput.listening) {
+      await widget.voiceInput.stop();
+      return;
+    }
+    await widget.speech.stop();
+    await widget.voiceInput.start(onFinal: (text) {
+      input.text = text;
+      if (dialogMode) _send(textOverride: text);
+    });
+  }
+
+  Future<void> _send({String? textOverride}) async {
+    final text = (textOverride ?? input.text).trim();
+    if ((text.isEmpty && pendingAttachments.isEmpty) || busy) return;
+
+    await widget.speech.stop();
+    if (!await _ensureBrainReady()) return;
+
+    final attachments = List<ChatAttachment>.from(pendingAttachments);
+    final taskText = text.isEmpty ? 'Проанализируй вложение.' : text;
+
+    setState(() {
+      busy = true;
+      messages.add(_Message(
+        user: true,
+        text: text,
+        attachments: attachments,
+      ));
+      pendingAttachments.clear();
+      input.clear();
+      status = attachments.isEmpty
+          ? 'Dream Pulse думает…'
+          : 'Dream Pulse · выбирает инструменты…';
+    });
+
+    try {
+      final answerBuffer = StringBuffer();
+      var assistantIndex = -1;
+      var lastPaint = DateTime.fromMillisecondsSinceEpoch(0);
+
+      await for (final chunk in widget.core.askStream(
+        taskText,
+        thinking: thinking && _thinkAvailable,
+        allowWeb: forceWeb,
+        attachments: attachments,
+      )) {
+        if (chunk.isEmpty) continue;
+        answerBuffer.write(chunk);
+        if (!mounted) return;
+
+        final now = DateTime.now();
+        final shouldPaint =
+            now.difference(lastPaint).inMilliseconds >= 45 ||
+            chunk.endsWith('.') ||
+            chunk.endsWith('!') ||
+            chunk.endsWith('?') ||
+            chunk.contains('\n');
+        if (!shouldPaint) continue;
+
+        final partial = answerBuffer.toString();
+        setState(() {
+          if (assistantIndex < 0) {
+            assistantIndex = messages.length;
+            messages.add(_Message(user: false, text: partial));
+          } else {
+            messages[assistantIndex] =
+                _Message(user: false, text: partial);
+          }
+          status = '${widget.brain.lastBackend} · ${widget.core.status}';
+        });
+        lastPaint = now;
+      }
+
+      final answer = answerBuffer.toString().trim();
+      if (!mounted) return;
+
+      if (answer.isNotEmpty) {
+        setState(() {
+          final sources = widget.core.lastSources
+              .take(4)
+              .map((s) => _SourceLink(
+                    title: s.title,
+                    url: s.url,
+                    host: s.host,
+                  ))
+              .toList(growable: false);
+          if (assistantIndex < 0) {
+            messages.add(_Message(
+              user: false,
+              text: answer,
+              sources: sources,
+            ));
+          } else {
+            messages[assistantIndex] = _Message(
+              user: false,
+              text: answer,
+              sources: sources,
+            );
+          }
+          final tools = widget.core.lastToolTrace;
+          status = tools.isEmpty
+              ? '${widget.brain.lastBackend} · готов'
+              : 'TOOLS: ${tools.join(' → ')} · готов';
+        });
+
+        if (autoSpeak) {
+          final speechFuture = widget.speech.speak(
+            answer,
+            expression: widget.core.personality.voiceExpression,
+          );
+          if (dialogMode) {
+            speechFuture.then((_) async {
+              if (!mounted || busy || !dialogMode) return;
+              await Future<void>.delayed(
+                const Duration(milliseconds: 250),
+              );
+              if (!mounted || busy || !dialogMode) return;
+              await widget.voiceInput.start(onFinal: (spoken) {
+                input.text = spoken;
+                _send(textOverride: spoken);
+              });
+            }).catchError((_) {});
+          } else {
+            speechFuture.catchError((_) {
+              if (!mounted) return;
+              setState(() {
+                status = 'Голос · ${widget.speech.voiceStatus}';
+              });
+            });
+          }
+        }
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final clean = _publicError(e);
+      setState(() {
+        messages.add(
+          _Message(
+            user: false,
+            text: 'Не получилось ответить: $clean',
+          ),
+        );
+        status = 'Ошибка';
+      });
+    } finally {
+      if (mounted) setState(() => busy = false);
+    }
+  }
+
+  String _publicError(Object error) {
+    final raw = error.toString();
+
+    if (raw.contains('GROQ_LIMIT')) {
+      return 'бесплатный лимит Groq временно исчерпан. AUTO переключится на LOCAL, если локальная модель загружена.';
+    }
+    if (raw.contains('GROQ_AUTH') || raw.contains('401')) {
+      return 'Groq отклонил API key. Проверь ключ в настройках мозга.';
+    }
+    if (raw.contains('Contains invalid characters')) {
+      return 'ошибка кодировки сетевого запроса.';
+    }
+    if (raw.contains('SocketException') ||
+        raw.contains('Connection') ||
+        raw.contains('timed out') ||
+        raw.contains('TimeoutException')) {
+      return 'нет соединения с онлайн-моделью.';
+    }
+
+    var clean = raw
+        .replaceFirst('Bad state: ', '')
+        .replaceFirst('StateError: ', '')
+        .replaceFirst('Exception: ', '');
+
+    // Never expose prompts, JSON payloads, keys or internal Core instructions.
+    if (clean.contains('{"model"') ||
+        clean.contains('"messages"') ||
+        clean.contains('DREAM PULSE PERSONA') ||
+        clean.contains('USER TASK:')) {
+      return 'онлайн-модель не приняла запрос.';
+    }
+
+    clean = clean.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (clean.length > 180) {
+      clean = '${clean.substring(0, 180)}…';
+    }
+    return clean.isEmpty ? 'неизвестная ошибка' : clean;
+  }
+
+  void _setMode(BrainMode mode) {
+    setState(() {
+      widget.brain.mode = mode;
+      if (mode == BrainMode.local) thinking = false;
+    });
+  }
+
+  @override
+  void dispose() {
+    widget.localBrain.removeListener(_syncStatus);
+    widget.brain.groq.removeListener(_syncStatus);
+    widget.brain.api.removeListener(_syncStatus);
+    widget.voiceInput.removeListener(_syncVoice);
+    widget.installer.removeListener(_syncStatus);
+    input.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: Listenable.merge([
+        widget.localBrain,
+        widget.brain.groq,
+        widget.brain.api,
+        widget.brain,
+        widget.installer,
+        widget.voiceInput,
+        widget.core,
+      ]),
+      builder: (context, _) => SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 6, 10, 2),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: _showBrainSheet,
+                      behavior: HitTestBehavior.opaque,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '$_modeLabel · $_brainStatus',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                color: Color(0xFFE7E7EA),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            const Text(
+                              'AUTO: Groq Free → LOCAL · без платного fallback',
+                              style: TextStyle(
+                                fontSize: 10,
+                                color: Color(0xFF777B85),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  PopupMenuButton<BrainMode>(
+                    tooltip: 'Выбрать мозг',
+                    initialValue: widget.brain.mode,
+                    color: const Color(0xFF15161B),
+                    onSelected: _setMode,
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(
+                        value: BrainMode.auto,
+                        child: Text('AUTO · FREE → LOCAL'),
+                      ),
+                      PopupMenuItem(
+                        value: BrainMode.groq,
+                        child: Text('GROQ FREE · 120B'),
+                      ),
+                      PopupMenuItem(
+                        value: BrainMode.local,
+                        child: Text('LOCAL · DeepSeek 1.5B'),
+                      ),
+                      PopupMenuItem(
+                        value: BrainMode.deepseek,
+                        child: Text('DEEPSEEK API · платный'),
+                      ),
+                    ],
+                    child: const Padding(
+                      padding: EdgeInsets.all(10),
+                      child: Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        color: Color(0xFFA8ABB4),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 6),
+              child: Wrap(
+                spacing: 18,
+                runSpacing: 4,
+                children: [
+                  _TextToggle(
+                    label: autoSpeak ? 'Голос · on' : 'Голос · off',
+                    active: autoSpeak,
+                    onTap: () => setState(() => autoSpeak = !autoSpeak),
+                  ),
+                  _TextToggle(
+                    label: widget.speech.voiceLabel,
+                    active: widget.speech.localVoiceReady,
+                    onTap: _showVoiceSheet,
+                  ),
+                  _TextToggle(
+                    label: dialogMode ? 'Диалог · on' : 'Диалог',
+                    active: dialogMode,
+                    onTap: () => setState(() => dialogMode = !dialogMode),
+                  ),
+                  _TextToggle(
+                    label: _thinkAvailable
+                        ? (thinking ? 'Think · on' : 'Think')
+                        : 'Think · online',
+                    active: thinking && _thinkAvailable,
+                    enabled: _thinkAvailable,
+                    onTap: () {
+                      if (!_thinkAvailable) {
+                        setState(
+                          () => status =
+                              'Think доступен через Groq Free или DeepSeek API',
+                        );
+                        return;
+                      }
+                      setState(() => thinking = !thinking);
+                    },
+                  ),
+                  _TextToggle(
+                    label: forceWeb ? 'Web · всегда' : 'Web · auto',
+                    active: true,
+                    onTap: () => setState(() => forceWeb = !forceWeb),
+                  ),
+                ],
+              ),
+            ),
+            Expanded(
+              child: messages.isEmpty
+                  ? const _EmptyChat()
+                  : ListView.builder(
+                      padding: const EdgeInsets.fromLTRB(16, 10, 16, 18),
+                      itemCount: messages.length,
+                      itemBuilder: (_, i) => _PlainMessage(messages[i]),
+                    ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(16, 2, 16, 5),
+              child: Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  widget.voiceInput.listening
+                      ? '🎙 ${widget.voiceInput.partial.isEmpty ? 'слушаю…' : widget.voiceInput.partial}'
+                      : status,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(
+                    fontSize: 10,
+                    color: Color(0xFF737782),
+                  ),
+                ),
+              ),
+            ),
+            if (pendingAttachments.isNotEmpty)
+              SizedBox(
+                height: 82,
+                child: ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(12, 4, 12, 8),
+                  scrollDirection: Axis.horizontal,
+                  itemCount: pendingAttachments.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (_, i) => _PendingAttachment(
+                    attachment: pendingAttachments[i],
+                    onRemove: () => setState(() {
+                      pendingAttachments.removeAt(i);
+                    }),
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  IconButton(
+                    onPressed: busy ? null : _showAttachmentSheet,
+                    icon: const Icon(Icons.add_rounded),
+                    color: const Color(0xFF9A9EA8),
+                    tooltip: 'Добавить фото, видео или файл',
+                  ),
+                  IconButton(
+                    onPressed: busy ? null : _toggleMic,
+                    icon: Icon(
+                      widget.voiceInput.listening
+                          ? Icons.mic_rounded
+                          : Icons.mic_none_rounded,
+                    ),
+                    color: const Color(0xFF9A9EA8),
+                  ),
+                  Expanded(
+                    child: Container(
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF14151A),
+                        borderRadius: BorderRadius.all(
+                          Radius.circular(20),
+                        ),
+                      ),
+                      child: TextField(
+                        controller: input,
+                        minLines: 1,
+                        maxLines: 5,
+                        onSubmitted: (_) => _send(),
+                        decoration: const InputDecoration(
+                          hintText: 'Напиши сообщение…',
+                          filled: false,
+                          border: InputBorder.none,
+                          enabledBorder: InputBorder.none,
+                          focusedBorder: InputBorder.none,
+                          contentPadding: EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 11,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: busy ? widget.brain.stop : _send,
+                    icon: Icon(
+                      busy
+                          ? Icons.stop_circle_outlined
+                          : Icons.arrow_upward_rounded,
+                    ),
+                    color: const Color(0xFFFF7A2F),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _Message {
+  const _Message({
+    required this.user,
+    required this.text,
+    this.attachments = const [],
+    this.sources = const [],
+  });
+
+  final bool user;
+  final String text;
+  final List<ChatAttachment> attachments;
+  final List<_SourceLink> sources;
+}
+
+class _SourceLink {
+  const _SourceLink({
+    required this.title,
+    required this.url,
+    required this.host,
+  });
+
+  final String title;
+  final String url;
+  final String host;
+}
+
+class _PlainMessage extends StatelessWidget {
+  const _PlainMessage(this.message);
+
+  final _Message message;
+
+  Future<void> _openSource(String url) async {
+    final uri = Uri.tryParse(url);
+    if (uri == null) return;
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 20),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            message.user ? 'Вы' : 'Dream Pulse',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: message.user
+                  ? const Color(0xFF8D919B)
+                  : const Color(0xFFFF7A2F),
+            ),
+          ),
+          if (message.attachments.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            _AttachmentGallery(attachments: message.attachments),
+          ],
+          if (message.text.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            SelectableText(
+              message.text,
+              style: TextStyle(
+                fontSize: 15,
+                height: 1.48,
+                color: message.user
+                    ? const Color(0xFFD6D7DB)
+                    : const Color(0xFFF0F0F2),
+              ),
+            ),
+          ],
+          if (message.sources.isNotEmpty) ...[
+            const SizedBox(height: 14),
+            const Text(
+              'Источники',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: Color(0xFF8D919B),
+              ),
+            ),
+            const SizedBox(height: 6),
+            ...message.sources.map((source) => InkWell(
+                  onTap: () => _openSource(source.url),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 5),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(
+                          Icons.open_in_new_rounded,
+                          size: 14,
+                          color: Color(0xFFFF7A2F),
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Text(
+                            source.title.isEmpty
+                                ? source.host
+                                : '${source.title} · ${source.host}',
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 12,
+                              height: 1.35,
+                              color: Color(0xFFB9BBC2),
+                              decoration: TextDecoration.underline,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _AttachmentGallery extends StatelessWidget {
+  const _AttachmentGallery({required this.attachments});
+
+  final List<ChatAttachment> attachments;
+
+  @override
+  Widget build(BuildContext context) {
+    return Wrap(
+      spacing: 8,
+      runSpacing: 8,
+      children: attachments.map((attachment) {
+        if (attachment.isImage) {
+          return ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.file(
+              File(attachment.path),
+              width: 126,
+              height: 92,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => _AttachmentTile(
+                attachment: attachment,
+              ),
+            ),
+          );
+        }
+        return _AttachmentTile(attachment: attachment);
+      }).toList(),
+    );
+  }
+}
+
+class _AttachmentTile extends StatelessWidget {
+  const _AttachmentTile({required this.attachment});
+
+  final ChatAttachment attachment;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = attachment.isVideo
+        ? Icons.videocam_outlined
+        : attachment.isImage
+            ? Icons.image_outlined
+            : Icons.description_outlined;
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 210),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: const Color(0xFF15161B),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 18, color: const Color(0xFFFF7A2F)),
+          const SizedBox(width: 7),
+          Flexible(
+            child: Text(
+              attachment.name,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 11),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _PendingAttachment extends StatelessWidget {
+  const _PendingAttachment({
+    required this.attachment,
+    required this.onRemove,
+  });
+
+  final ChatAttachment attachment;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        SizedBox(
+          width: attachment.isImage ? 90 : 150,
+          height: 64,
+          child: attachment.isImage
+              ? ClipRRect(
+                  borderRadius: BorderRadius.circular(10),
+                  child: Image.file(
+                    File(attachment.path),
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) =>
+                        _AttachmentTile(attachment: attachment),
+                  ),
+                )
+              : _AttachmentTile(attachment: attachment),
+        ),
+        Positioned(
+          right: -5,
+          top: -5,
+          child: GestureDetector(
+            onTap: onRemove,
+            child: Container(
+              width: 20,
+              height: 20,
+              decoration: const BoxDecoration(
+                color: Color(0xFF2C2E35),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.close, size: 14),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _TextToggle extends StatelessWidget {
+  const _TextToggle({
+    required this.label,
+    required this.active,
+    required this.onTap,
+    this.enabled = true,
+  });
+
+  final String label;
+  final bool active;
+  final bool enabled;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final color = !enabled
+        ? const Color(0xFF4E5159)
+        : active
+            ? const Color(0xFFFF7A2F)
+            : const Color(0xFF858994);
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 7),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 11,
+            fontWeight: active ? FontWeight.w600 : FontWeight.w400,
+            color: color,
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _EmptyChat extends StatelessWidget {
+  const _EmptyChat();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Padding(
+        padding: EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Dream Pulse',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Groq Free 120B  →  LOCAL DeepSeek 1.5B\nWeb Worker и память остаются в Dream Pulse.',
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 12,
+                height: 1.5,
+                color: Color(0xFF858994),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
