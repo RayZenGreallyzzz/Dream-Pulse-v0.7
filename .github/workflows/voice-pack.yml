@@ -14,15 +14,26 @@ jobs:
   publish:
     runs-on: ubuntu-latest
     steps:
-      - name: Download source model package
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download verified RuVoice full source package
         run: |
           curl -L --fail --retry 3             -o /tmp/ruvoice-full.apk             https://github.com/kost-t-human/ruvoice-tts/releases/download/v0.18.4/ruvoice-tts-0.18.4.apk
+          echo "be05ccbcc898ed3c4ba42a8c53e11583b85990f4676332072400abd1b022f8cd  /tmp/ruvoice-full.apk" | sha256sum -c -
+
+      - name: Extract only Dream Pulse voice model files
+        run: |
           mkdir -p voice-pack
           for asset in accentor.ptl backbone.pte head.ptl tts_mel.ptl; do
             unzip -p /tmp/ruvoice-full.apk "assets/silero/$asset" > "voice-pack/$asset"
             test -s "voice-pack/$asset"
           done
-          (cd voice-pack && sha256sum accentor.ptl backbone.pte head.ptl tts_mel.ptl > dream-pulse-voice-pack-v1.sha256)
+          (
+            cd voice-pack
+            sha256sum accentor.ptl backbone.pte head.ptl tts_mel.ptl > dream-pulse-voice-pack-v1.sha256
+          )
+          cp patches/v012/android/silero_model_license.txt voice-pack/SILERO-LICENSE.txt
           ls -lh voice-pack
           cat voice-pack/dream-pulse-voice-pack-v1.sha256
 
@@ -31,6 +42,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           if ! gh release view voice-pack-v1 --repo "${GITHUB_REPOSITORY}" >/dev/null 2>&1; then
-            gh release create voice-pack-v1               --repo "${GITHUB_REPOSITORY}"               --title "Dream Pulse Voice Pack v1"               --notes "Local Silero v5_5_ru weights for Dream Pulse Voice Engine. Dream Pulse exposes Baya and Kseniya only."
+            gh release create voice-pack-v1               --repo "${GITHUB_REPOSITORY}"               --title "Dream Pulse Voice Pack v1"               --notes "Private in-app Silero v5_5_ru voice weights for Dream Pulse. Dream Pulse exposes Baya and Kseniya only. Model license included."
           fi
-          gh release upload voice-pack-v1             voice-pack/accentor.ptl             voice-pack/backbone.pte             voice-pack/head.ptl             voice-pack/tts_mel.ptl             voice-pack/dream-pulse-voice-pack-v1.sha256             --clobber             --repo "${GITHUB_REPOSITORY}"
+          gh release upload voice-pack-v1             voice-pack/accentor.ptl             voice-pack/backbone.pte             voice-pack/head.ptl             voice-pack/tts_mel.ptl             voice-pack/dream-pulse-voice-pack-v1.sha256             voice-pack/SILERO-LICENSE.txt             --clobber             --repo "${GITHUB_REPOSITORY}"
