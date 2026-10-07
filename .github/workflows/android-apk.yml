@@ -17,6 +17,7 @@ on:
       - 'patches/v096/**'
       - 'patches/v097/**'
       - 'patches/v098/**'
+      - 'patches/v010/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -205,14 +206,28 @@ jobs:
           grep -q "REAL TASKS ONLY" lib/ui/home_page.dart
           rm -rf patches/v098
 
-      - name: Inspect current assistant source
+      - name: Apply v0.10 DeepSeek LOCAL API and clean chat
         run: |
-          echo "===== assistant_page.dart ====="
-          sed -n '1,420p' lib/ui/assistant_page.dart
-          echo "===== brain_router.dart ====="
-          sed -n '1,260p' lib/llm/brain_router.dart
-          echo "===== launch_gate.dart ====="
-          sed -n '1,300p' lib/ui/launch_gate.dart
+          mkdir -p lib/llm lib/ui
+          cp patches/v010/lib/llm/local_deepseek_backend.dart lib/llm/local_deepseek_backend.dart
+          cp patches/v010/lib/llm/deepseek_model_installer.dart lib/llm/deepseek_model_installer.dart
+          cp patches/v010/lib/llm/deepseek_api_backend.dart lib/llm/deepseek_api_backend.dart
+          cp patches/v010/lib/llm/brain_router.dart lib/llm/brain_router.dart
+          cp patches/v010/lib/ui/assistant_page.dart lib/ui/assistant_page.dart
+          cp patches/v010/lib/ui/assistant_shell.dart lib/ui/assistant_shell.dart
+          cp patches/v010/lib/ui/launch_gate.dart lib/ui/launch_gate.dart
+          rm -f lib/llm/local_qwen_backend.dart lib/llm/qwen_model_installer.dart
+          python3 patches/v010/patch_pubspec.py
+          grep -q "version: 0.10.0+20" pubspec.yaml
+          grep -q "enum BrainMode { auto, local, api }" lib/llm/brain_router.dart
+          grep -q "DeepSeek V4 Flash" lib/llm/deepseek_api_backend.dart
+          grep -q "class LocalDeepSeekBackend" lib/llm/local_deepseek_backend.dart
+          grep -q "class DeepSeekModelInstaller" lib/llm/deepseek_model_installer.dart
+          grep -q "class _PlainMessage" lib/ui/assistant_page.dart
+          test ! -f lib/llm/local_qwen_backend.dart
+          test ! -f lib/llm/qwen_model_installer.dart
+          ! grep -R "Qwen3 0.6B" lib
+          rm -rf patches/v010
 
       - name: Set up Java 17
         uses: actions/setup-java@v4
@@ -272,7 +287,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.9.8-live-trace-smart-deepseek-baya-arm64-apk
+          name: dream-pulse-v0.10-deepseek-local-api-web-clean-chat-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
