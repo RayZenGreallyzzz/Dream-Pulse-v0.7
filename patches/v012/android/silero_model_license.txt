@@ -1,0 +1,15 @@
+Dream Pulse Voice — model attribution
+
+Neural speech model:
+Silero TTS v5_5_ru
+
+The neural model weights are distributed under Creative Commons
+Attribution-NonCommercial-ShareAlike 4.0 International (CC BY-NC-SA 4.0).
+
+Dream Pulse Voice is an independent, private in-app runtime. It is not an
+Android TextToSpeechService and does not expose a TTS service to other apps.
+
+Only the Baya and Kseniya speaker identities are exposed by Dream Pulse.
+
+License:
+https://creativecommons.org/licenses/by-nc-sa/4.0/
