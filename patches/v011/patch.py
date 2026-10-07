@@ -6,7 +6,6 @@ s = p.read_text()
 deps = {
     'image_picker:': '  image_picker: ^1.1.2\n',
     'file_picker:': '  file_picker: ^11.0.3\n',
-    'video_thumbnail:': '  video_thumbnail: ^0.5.6\n',
     'url_launcher:': '  url_launcher: ^6.3.1\n',
 }
 
