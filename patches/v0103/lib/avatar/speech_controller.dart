@@ -324,6 +324,10 @@ class SpeechController {
     VoiceExpression? expression,
     bool forceNeural = false,
   }) async {
+    if (!initialized) {
+      await init();
+    }
+
     final trimmed = ResponseSanitizer.finalOnly(text);
     if (trimmed.isEmpty) return;
 
