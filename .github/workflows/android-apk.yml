@@ -24,6 +24,7 @@ on:
       - 'patches/v011/**'
       - 'patches/v0111/**'
       - 'patches/v012/**'
+      - 'patches/v0121/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -326,6 +327,16 @@ jobs:
           grep -q "Kseniya" lib/avatar/speech_controller.dart
           ! grep -q "flutter_tts:" pubspec.yaml
 
+      - name: Apply v0.12.1 lazy voice memory fix
+        run: |
+          mkdir -p lib/voice
+          cp patches/v0121/lib/voice/dream_pulse_voice_backend.dart lib/voice/dream_pulse_voice_backend.dart
+          python3 patches/v0121/patch.py
+          grep -q "version: 0.12.1+27" pubspec.yaml
+          grep -q "lazy" lib/voice/dream_pulse_voice_backend.dart
+          ! grep -q "_warmup" lib/voice/dream_pulse_voice_backend.dart
+          rm -rf patches/v0121
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -426,7 +437,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.12-private-silero-baya-kseniya-arm64-apk
+          name: dream-pulse-v0.12.1-lazy-voice-memory-fix-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
