@@ -1,0 +1,22 @@
+name: Inspect Silero Voice Assets
+
+on:
+  push:
+    paths:
+      - '.github/workflows/inspect-silero-assets.yml'
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download RuVoice full APK
+        run: |
+          curl -L --fail --retry 3             -o ruvoice.apk             https://github.com/kost-t-human/ruvoice-tts/releases/download/v0.18.4/ruvoice-tts-0.18.4.apk
+      - name: List model assets and arm64 libraries
+        run: |
+          echo "=== SILERO ASSETS ==="
+          unzip -l ruvoice.apk | grep -E 'assets/.*/(tts_mel|head|backbone|accentor|homo|stress|silero).*\.(ptl|pte|bin|json)' || true
+          echo "=== ARM64 LIBS ==="
+          unzip -l ruvoice.apk | grep 'lib/arm64-v8a/' || true
+          echo "=== ALL SILERO ==="
+          unzip -l ruvoice.apk | grep 'assets/silero/' || true
