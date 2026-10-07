@@ -3,7 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
+import 'package:flutter/services.dart';
 
 import 'attachments.dart';
 
@@ -219,18 +219,20 @@ class GroqVisionTool {
 class VideoVisionTool {
   VideoVisionTool(this.vision);
 
+  static const _media = MethodChannel('dream_pulse/media');
+
   final GroqVisionTool vision;
 
   Future<String> analyze(String path, String prompt) async {
     final frames = <Uint8List>[];
     for (final timeMs in const [0, 3000, 8000]) {
       try {
-        final data = await VideoThumbnail.thumbnailData(
-          video: path,
-          imageFormat: ImageFormat.JPEG,
-          maxWidth: 960,
-          quality: 72,
-          timeMs: timeMs,
+        final data = await _media.invokeMethod<Uint8List>(
+          'videoFrame',
+          {
+            'path': path,
+            'timeMs': timeMs,
+          },
         );
         if (data != null && data.isNotEmpty) frames.add(data);
       } catch (_) {}
