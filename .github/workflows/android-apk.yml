@@ -343,7 +343,7 @@ jobs:
           mkdir -p lib/voice
           cp patches/v013/lib/voice/dream_pulse_voice_backend.dart lib/voice/dream_pulse_voice_backend.dart
           python3 patches/v013/patch.py
-          grep -q "version: 0.13.0+29" pubspec.yaml
+          grep -q "version: 0.13.1+30" pubspec.yaml
           grep -q "bool autoSpeak = false;" lib/ui/assistant_page.dart
           grep -q "installLocalVoice" lib/avatar/speech_controller.dart
           grep -q "crypto:" pubspec.yaml
@@ -443,7 +443,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.13-light-apk-detachable-voice-pack
+          name: dream-pulse-v0.13.1-direct-voice-download-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
