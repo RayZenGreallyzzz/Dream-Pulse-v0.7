@@ -71,6 +71,22 @@ class DreamPulseVoiceBackend {
     'tts_mel.ptl',
   ];
 
+  static const _sha256 = <String, String>{
+    'accentor.ptl': '0b727755cbc9efb79852528561fcedc5543c627a611811d32c66f5a1b71ba9b1',
+    'backbone.pte': 'a35bd43df063481995929fa84aada4aafd8e4ac982eb7ef95384f5c5314e6260',
+    'head.ptl': 'f7ea3ea93de475639ea991d5befa975a73122711536f88cd79aeed9ee580e9a4',
+    'tts_mel.ptl': 'cea5e77af3ae9f8ca45701ba51f5fadedf88ca924b571b6940d2b0a295451902',
+  };
+
+  static const _sizes = <String, int>{
+    'accentor.ptl': 11002183,
+    'backbone.pte': 53380480,
+    'head.ptl': 4961893,
+    'tts_mel.ptl': 28152216,
+  };
+
+  static const _totalBytes = 97596772;
+
   DreamPulseVoiceProfile profile = const DreamPulseVoiceProfile(
     voice: 'baya',
     rate: 1.00,
@@ -85,6 +101,7 @@ class DreamPulseVoiceBackend {
   bool speaking = false;
   bool installing = false;
   double installProgress = 0;
+  String lastInstallError = '';
   String? _voiceDir;
 
   Future<void> init() async {
@@ -112,100 +129,119 @@ class DreamPulseVoiceBackend {
 
     installing = true;
     installProgress = 0;
-    status = 'Голос · подготовка загрузки';
+    lastInstallError = '';
+    status = 'Голос · подключение…';
+    onProgress?.call(0.001);
+
     final dir = Directory(dirPath);
     await dir.create(recursive: true);
+    var completedBytes = 0;
 
     try {
-      final manifestText = await _downloadText('$_base/dream-pulse-voice-pack-v1.sha256');
-      final expected = <String, String>{};
-      for (final line in manifestText.split('\n')) {
-        final parts = line.trim().split(RegExp(r'\s+'));
-        if (parts.length >= 2) {
-          expected[parts.last] = parts.first.toLowerCase();
-        }
-      }
-
-      for (var i = 0; i < _files.length; i++) {
-        final name = _files[i];
+      for (final name in _files) {
         final target = File('$dirPath/$name');
         final tmp = File('$dirPath/.$name.part');
-        if (tmp.existsSync()) await tmp.delete();
+        if (await tmp.exists()) await tmp.delete();
 
+        final expectedSize = _sizes[name]!;
         status = 'Голос · загрузка $name';
+
         await _downloadFile(
           '$_base/$name',
           tmp,
-          (part) {
-            installProgress = (i + part) / _files.length;
+          expectedSize,
+          (received) {
+            final overall =
+                (completedBytes + received) / _totalBytes;
+            installProgress = overall.clamp(0.001, 0.999);
             onProgress?.call(installProgress);
           },
         );
 
-        final wanted = expected[name];
-        if (wanted == null) {
-          throw StateError('Voice pack manifest does not contain $name');
-        }
         final got = (await sha256.bind(tmp.openRead()).first).toString();
+        final wanted = _sha256[name]!;
         if (got.toLowerCase() != wanted) {
           await tmp.delete();
           throw StateError('SHA-256 mismatch: $name');
         }
 
-        if (target.existsSync()) await target.delete();
+        if (await target.exists()) await target.delete();
         await tmp.rename(target.path);
-        installProgress = (i + 1) / _files.length;
+
+        completedBytes += expectedSize;
+        installProgress = completedBytes / _totalBytes;
         onProgress?.call(installProgress);
       }
 
       final result =
           await _channel.invokeMapMethod<String, dynamic>('status') ?? const {};
       ready = result['modelPresent'] == true;
-      if (!ready) throw StateError('Voice pack installed but model check failed');
+      if (!ready) {
+        throw StateError('Voice pack installed but model check failed');
+      }
+
+      installProgress = 1.0;
+      onProgress?.call(1.0);
       status = 'LOCAL · Silero v5_5_ru · ${label(profile.voice)}';
+    } catch (e) {
+      lastInstallError = e.toString()
+          .replaceFirst('Bad state: ', '')
+          .replaceFirst('HttpException: ', '');
+      status = 'Голос · ошибка: $lastInstallError';
+      rethrow;
     } finally {
       installing = false;
-    }
-  }
-
-  Future<String> _downloadText(String url) async {
-    final client = HttpClient();
-    try {
-      final request = await client.getUrl(Uri.parse(url));
-      request.followRedirects = true;
-      final response = await request.close();
-      if (response.statusCode != HttpStatus.ok) {
-        throw HttpException('HTTP ${response.statusCode}');
-      }
-      return response.transform(utf8.decoder).join();
-    } finally {
-      client.close(force: true);
     }
   }
 
   Future<void> _downloadFile(
     String url,
     File target,
-    void Function(double) onProgress,
+    int expectedSize,
+    void Function(int receivedBytes) onProgress,
   ) async {
-    final client = HttpClient();
+    final client = HttpClient()
+      ..connectionTimeout = const Duration(seconds: 20)
+      ..idleTimeout = const Duration(seconds: 30);
     try {
       final request = await client.getUrl(Uri.parse(url));
       request.followRedirects = true;
-      final response = await request.close();
-      if (response.statusCode != HttpStatus.ok) {
-        throw HttpException('HTTP ${response.statusCode}');
+      request.maxRedirects = 8;
+      request.headers.set(
+        HttpHeaders.userAgentHeader,
+        'DreamPulse/0.13.1 Android',
+      );
+      request.headers.set(HttpHeaders.acceptHeader, 'application/octet-stream');
+
+      final response = await request.close().timeout(
+        const Duration(seconds: 30),
+      );
+      if (response.statusCode != HttpStatus.ok &&
+          response.statusCode != HttpStatus.partialContent) {
+        throw HttpException('HTTP ${response.statusCode}: $url');
       }
-      final total = response.contentLength;
+
       var got = 0;
       final sink = target.openWrite();
-      await for (final chunk in response) {
-        sink.add(chunk);
-        got += chunk.length;
-        if (total > 0) onProgress((got / total).clamp(0.0, 1.0));
+      try {
+        await for (final chunk in response.timeout(
+          const Duration(seconds: 30),
+        )) {
+          sink.add(chunk);
+          got += chunk.length;
+          onProgress(got);
+        }
+        await sink.flush();
+      } finally {
+        await sink.close();
       }
-      await sink.flush();
-      await sink.close();
+
+      if (got != expectedSize) {
+        throw StateError(
+          'Неполная загрузка: ${target.uri.pathSegments.last} '
+          '($got из $expectedSize байт)',
+        );
+      }
     } finally {
       client.close(force: true);
     }
