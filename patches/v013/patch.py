@@ -4,7 +4,7 @@ p = Path('pubspec.yaml')
 s = p.read_text()
 if '  crypto:' not in s:
     s = s.replace('dependencies:\n', 'dependencies:\n  crypto: ^3.0.6\n', 1)
-s = '\n'.join('version: 0.13.0+29' if line.startswith('version:') else line for line in s.splitlines()) + '\n'
+s = '\n'.join('version: 0.13.1+30' if line.startswith('version:') else line for line in s.splitlines()) + '\n'
 p.write_text(s)
 
 ui = Path('lib/ui/assistant_page.dart')
@@ -54,7 +54,7 @@ replacement = '''                    Text(
                       LinearProgressIndicator(
                         value: widget.speech.localVoiceInstalling
                             ? widget.speech.localVoiceInstallProgress
-                            : null,
+                            : 0.0,
                         minHeight: 3,
                       ),
                       const SizedBox(height: 8),
