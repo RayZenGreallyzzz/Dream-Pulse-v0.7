@@ -3,7 +3,7 @@ from pathlib import Path
 p = Path('pubspec.yaml')
 s = p.read_text()
 s = '\n'.join(
-    'version: 0.14.0+31' if line.startswith('version:') else line
+    'version: 0.14.1+32' if line.startswith('version:') else line
     for line in s.splitlines()
 ) + '\n'
 p.write_text(s)
@@ -21,3 +21,13 @@ text = text.replace(
     'Установить SAFE Voice · Baya + Kseniya'
 )
 ui.write_text(text)
+
+
+speech = Path('lib/avatar/speech_controller.dart')
+if speech.exists():
+    text = speech.read_text()
+    text = text.replace(
+        "'Привет! Я Dream Pulse. Это мой локальный голос ${selectedVoice.label}.'",
+        "'Привет. Я Dream Pulse.'"
+    )
+    speech.write_text(text)
