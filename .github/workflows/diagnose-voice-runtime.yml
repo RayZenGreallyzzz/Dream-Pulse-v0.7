@@ -1,0 +1,67 @@
+name: Diagnose Voice Native Runtime
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths:
+      - '.github/workflows/diagnose-voice-runtime.yml'
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download RuVoice full and ExecuTorch AAR
+        run: |
+          set -euxo pipefail
+          curl -L --fail --retry 3             -o /tmp/ruvoice.apk             https://github.com/kost-t-human/ruvoice-tts/releases/download/v0.18.4/ruvoice-tts-0.18.4.apk
+          curl -L --fail --retry 3             -o /tmp/executorch.aar             https://ossci-android.s3.amazonaws.com/executorch/release/1.5.0-xnnpack/executorch.aar
+
+      - name: Recreate current Dream Pulse ExecuTorch AAR
+        run: |
+          set -euxo pipefail
+          rm -rf /tmp/aar
+          mkdir -p /tmp/aar
+          (cd /tmp/aar && unzip -q /tmp/executorch.aar)
+          mkdir -p /tmp/aar/jni/arm64-v8a
+          unzip -p /tmp/ruvoice.apk lib/arm64-v8a/libexecutorch.so             > /tmp/aar/jni/arm64-v8a/libexecutorch.so
+
+      - name: Compare native libraries
+        run: |
+          set -euo pipefail
+          echo "=== RuVoice APK ARM64 libs ==="
+          unzip -Z1 /tmp/ruvoice.apk | grep '^lib/arm64-v8a/' | sort
+          echo
+          echo "=== Dream Pulse reconstructed AAR ARM64 libs ==="
+          find /tmp/aar/jni/arm64-v8a -maxdepth 1 -type f -printf '%f\n' | sort
+          echo
+          echo "=== SHA comparison for common libs ==="
+          mkdir -p /tmp/rvlibs
+          unzip -q /tmp/ruvoice.apk 'lib/arm64-v8a/*' -d /tmp/rvlibs
+          for f in /tmp/aar/jni/arm64-v8a/*.so; do
+            n=$(basename "$f")
+            rv="/tmp/rvlibs/lib/arm64-v8a/$n"
+            if [ -f "$rv" ]; then
+              a=$(sha256sum "$f" | awk '{print $1}')
+              b=$(sha256sum "$rv" | awk '{print $1}')
+              if [ "$a" = "$b" ]; then state=SAME; else state=DIFF; fi
+              echo "$n $state dream=$a ruvoice=$b"
+            else
+              echo "$n ONLY_IN_AAR"
+            fi
+          done
+          echo
+          echo "=== RuVoice libs missing from reconstructed AAR ==="
+          for rv in /tmp/rvlibs/lib/arm64-v8a/*.so; do
+            n=$(basename "$rv")
+            [ -f "/tmp/aar/jni/arm64-v8a/$n" ] || echo "$n"
+          done
+
+      - name: Inspect Java runtime references
+        run: |
+          set -euo pipefail
+          echo "=== SoLoader references in ExecuTorch classes ==="
+          unzip -p /tmp/executorch.aar classes.jar > /tmp/classes.jar
+          strings /tmp/classes.jar | grep -i 'soloader' | head -50 || true
+          echo "=== AAR metadata ==="
+          unzip -Z1 /tmp/executorch.aar | sort | head -200
