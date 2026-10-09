@@ -104,4 +104,32 @@ jobs:
             n=$(basename "$f")
             [ -f "/tmp/dplibs/lib/arm64-v8a/$n" ] || echo "$n"
           done
+      - name: Compare libc++ across Dream Pulse voice builds
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/history
+          mkdir -p /tmp/history
+
+          fetch_one() {
+            run_id="$1"
+            artifact="$2"
+            label="$3"
+            mkdir -p "/tmp/history/$label"
+            gh run download "$run_id"               --repo "${GITHUB_REPOSITORY}"               --name "$artifact"               --dir "/tmp/history/$label"
+            unzip -p "/tmp/history/$label/app-release.apk"               lib/arm64-v8a/libc++_shared.so               > "/tmp/history/$label/libc++_shared.so"
+            printf '%s ' "$label"
+            sha256sum "/tmp/history/$label/libc++_shared.so"
+          }
+
+          fetch_one 37632928065 dream-pulse-v0.12-private-silero-baya-kseniya-arm64-apk v0.12
+          fetch_one 37650516516 dream-pulse-v0.13-light-apk-detachable-voice-pack v0.13
+          fetch_one 37808113367 dream-pulse-v0.13.1-direct-voice-download-arm64-apk v0.13.1
+          fetch_one 37937306410 dream-pulse-v0.14-safe-voice-separate-process-arm64-apk v0.14
+          fetch_one 37981344136 dream-pulse-v0.14.1-safe-voice-final-diagnostics-arm64-apk v0.14.1
+
+          echo "ruvoice"
+          unzip -p /tmp/ruvoice.apk lib/arm64-v8a/libc++_shared.so             > /tmp/history/ruvoice-libc++_shared.so
+          sha256sum /tmp/history/ruvoice-libc++_shared.so
 
