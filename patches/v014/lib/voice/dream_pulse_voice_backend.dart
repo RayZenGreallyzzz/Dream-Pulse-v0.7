@@ -248,14 +248,47 @@ class DreamPulseVoiceBackend {
     final clean = text.trim();
     if (clean.isEmpty) return;
     if (!ready) throw StateError('Сначала установи Baya + Kseniya');
+
     speaking = true;
-    status = 'LOCAL · ${label(profile.voice)} · говорит';
+    status = 'SAFE Voice · запуск ${label(profile.voice)}…';
+
     try {
       await _channel.invokeMethod<void>('speak', {
         'text': clean,
         ...profile.toNative(),
-      });
-      status = 'LOCAL · Silero v5_5_ru · ${label(profile.voice)}';
+      }).timeout(
+        const Duration(seconds: 45),
+        onTimeout: () async {
+          final state =
+              await _channel.invokeMapMethod<String, dynamic>('status') ??
+                  const {};
+          final stage = state['lastStage']?.toString() ?? 'unknown';
+          throw TimeoutException(
+            'SAFE Voice не ответил. Последний этап: $stage',
+          );
+        },
+      );
+
+      final state =
+          await _channel.invokeMapMethod<String, dynamic>('status') ?? const {};
+      final stage = state['lastStage']?.toString() ?? 'done';
+
+      if (stage != 'done') {
+        status = 'SAFE Voice · завершено · $stage';
+      } else {
+        status = 'SAFE · LOCAL · Silero v5_5_ru · ${label(profile.voice)}';
+      }
+    } on PlatformException catch (e) {
+      final state =
+          await _channel.invokeMapMethod<String, dynamic>('status') ?? const {};
+      final stage = state['lastStage']?.toString() ?? 'unknown';
+      status = 'SAFE Voice · ошибка на $stage';
+      throw StateError(
+        '${e.message ?? e.code} · этап: $stage',
+      );
+    } on TimeoutException catch (e) {
+      status = e.message ?? 'SAFE Voice · таймаут';
+      rethrow;
     } finally {
       speaking = false;
     }
