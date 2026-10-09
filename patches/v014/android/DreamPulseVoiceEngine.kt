@@ -45,7 +45,6 @@ class DreamPulseVoiceEngine(private val context: Context) {
 
     @Volatile private var mel: org.pytorch.Module? = null
     @Volatile private var head: org.pytorch.Module? = null
-    @Volatile private var accentor: org.pytorch.Module? = null
     @Volatile private var backbone: org.pytorch.executorch.Module? = null
     @Volatile private var currentTrack: AudioTrack? = null
 
@@ -56,7 +55,7 @@ class DreamPulseVoiceEngine(private val context: Context) {
 
     fun modelPresent(): Boolean {
         val dir = voiceDir()
-        return listOf("tts_mel.ptl", "head.ptl", "accentor.ptl", "backbone.pte")
+        return listOf("tts_mel.ptl", "head.ptl", "backbone.pte")
             .all { File(dir, it).let { f -> f.isFile && f.length() > 1024L } }
     }
 
@@ -64,8 +63,6 @@ class DreamPulseVoiceEngine(private val context: Context) {
         executor.execute {
             done(runCatching {
                 ensureLoaded()
-                // Run only the light accentor on warmup. Full synthesis stays lazy.
-                accentWords(listOf("привет"))
                 Unit
             })
         }
@@ -122,22 +119,19 @@ class DreamPulseVoiceEngine(private val context: Context) {
         executor.shutdownNow()
         runCatching { mel?.destroy() }
         runCatching { head?.destroy() }
-        runCatching { accentor?.destroy() }
         runCatching { backbone?.destroy() }
         mel = null
         head = null
-        accentor = null
         backbone = null
     }
 
     @Synchronized
     private fun ensureLoaded() {
-        if (mel != null && head != null && accentor != null && backbone != null) return
+        if (mel != null && head != null && backbone != null) return
         check(modelPresent()) { "Silero model assets are missing" }
 
         LitePyTorchAndroid.setNumThreads(threads)
         val dir = voiceDir()
-        accentor = LiteModuleLoader.load(File(dir, "accentor.ptl").absolutePath)
         mel = LiteModuleLoader.load(File(dir, "tts_mel.ptl").absolutePath)
         head = LiteModuleLoader.load(File(dir, "head.ptl").absolutePath)
 
@@ -210,71 +204,9 @@ class DreamPulseVoiceEngine(private val context: Context) {
     }
 
     private fun accent(text: String): String {
-        val matches = WORD_RE.findAll(text).toList()
-        if (matches.isEmpty()) return text
-
-        val clean = matches.map { it.value.lowercase(Locale.ROOT) }
-        val neural = clean.mapIndexedNotNull { i, word ->
-            val vowels = word.count { it in VOWELS }
-            if (vowels > 1 && 'ё' !in word) i to word else null
-        }
-        val predictions = if (neural.isEmpty()) {
-            emptyMap()
-        } else {
-            val probs = accentWords(neural.map { it.second })
-            neural.mapIndexed { i, pair -> pair.first to probs[i] }.toMap()
-        }
-
-        val out = StringBuilder()
-        var from = 0
-        for ((index, match) in matches.withIndex()) {
-            out.append(text.substring(from, match.range.first))
-            val raw = match.value
-            val lower = raw.lowercase(Locale.ROOT)
-            val vowelPositions = lower.indices.filter { lower[it] in VOWELS }
-            val stressedAt = when {
-                vowelPositions.isEmpty() -> -1
-                'ё' in lower -> lower.indexOf('ё')
-                vowelPositions.size == 1 -> vowelPositions.first()
-                else -> {
-                    val row = predictions[index] ?: FloatArray(0)
-                    var best = 0
-                    var bestValue = Float.NEGATIVE_INFINITY
-                    for (i in 0 until min(vowelPositions.size, row.size)) {
-                        if (row[i] > bestValue) {
-                            bestValue = row[i]
-                            best = i
-                        }
-                    }
-                    vowelPositions[best.coerceIn(0, vowelPositions.lastIndex)]
-                }
-            }
-            if (stressedAt >= 0) {
-                out.append(raw.substring(0, stressedAt))
-                out.append('+')
-                out.append(raw.substring(stressedAt))
-            } else {
-                out.append(raw)
-            }
-            from = match.range.last + 1
-        }
-        out.append(text.substring(from))
-        return out.toString()
-    }
-
-    private fun accentWords(words: List<String>): List<FloatArray> {
-        if (words.isEmpty()) return emptyList()
-        val inputs = words.map { IValue.from(it) }.toTypedArray()
-        val tuple = accentor!!.forward(IValue.listFrom(*inputs)).toTuple()
-        val tensor = tuple[0].toTensor()
-        val shape = tensor.shape()
-        if (shape.size < 2) return words.map { FloatArray(0) }
-        val rows = shape[0].toInt()
-        val cols = shape[1].toInt()
-        val data = tensor.dataAsFloatArray
-        return List(min(rows, words.size)) { row ->
-            FloatArray(cols) { col -> data[row * cols + col] }
-        } + List(max(0, words.size - rows)) { FloatArray(0) }
+        // SAFE profile: no auxiliary neural stress model in RAM.
+        // Silero v5_5_ru can synthesize plain normalized Russian text.
+        return text
     }
 
     private fun sequence(text: String): LongArray {
