@@ -83,7 +83,6 @@ class MainActivity : FlutterActivity() {
                     val names = listOf(
                         "tts_mel.ptl",
                         "head.ptl",
-                        "accentor.ptl",
                         "backbone.pte",
                     )
                     val present = names.all { name ->
