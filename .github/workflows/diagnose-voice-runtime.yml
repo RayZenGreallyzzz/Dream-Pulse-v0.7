@@ -65,3 +65,43 @@ jobs:
           strings /tmp/classes.jar | grep -i 'soloader' | head -50 || true
           echo "=== AAR metadata ==="
           unzip -Z1 /tmp/executorch.aar | sort | head -200
+      - name: Download final Dream Pulse v0.14.1 artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euxo pipefail
+          mkdir -p /tmp/dp
+          gh run download 37981344136             --repo "${GITHUB_REPOSITORY}"             --name dream-pulse-v0.14.1-safe-voice-final-diagnostics-arm64-apk             --dir /tmp/dp
+          test -s /tmp/dp/app-release.apk
+
+      - name: Compare final APK native libraries with RuVoice
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/dplibs /tmp/rvfinal
+          mkdir -p /tmp/dplibs /tmp/rvfinal
+          unzip -q /tmp/dp/app-release.apk 'lib/arm64-v8a/*' -d /tmp/dplibs
+          unzip -q /tmp/ruvoice.apk 'lib/arm64-v8a/*' -d /tmp/rvfinal
+
+          echo "=== Dream Pulse final APK ARM64 libs ==="
+          find /tmp/dplibs/lib/arm64-v8a -type f -printf '%f\n' | sort
+
+          echo "=== Final APK vs RuVoice SHA ==="
+          for f in /tmp/dplibs/lib/arm64-v8a/*.so; do
+            n=$(basename "$f")
+            rv="/tmp/rvfinal/lib/arm64-v8a/$n"
+            if [ -f "$rv" ]; then
+              a=$(sha256sum "$f" | awk '{print $1}')
+              b=$(sha256sum "$rv" | awk '{print $1}')
+              if [ "$a" = "$b" ]; then state=SAME; else state=DIFF; fi
+              echo "$n $state dream=$a ruvoice=$b"
+            else
+              echo "$n ONLY_IN_DREAM_PULSE"
+            fi
+          done
+
+          echo "=== RuVoice libs absent from final Dream Pulse APK ==="
+          for f in /tmp/rvfinal/lib/arm64-v8a/*.so; do
+            n=$(basename "$f")
+            [ -f "/tmp/dplibs/lib/arm64-v8a/$n" ] || echo "$n"
+          done
+
