@@ -88,10 +88,16 @@ class MainActivity : FlutterActivity() {
                     val present = names.all { name ->
                         File(dir, name).let { it.isFile && it.length() > 1024L }
                     }
+                    val stageFile = File(dir, "last-stage.txt")
+                    val lastStage = runCatching {
+                        if (stageFile.isFile) stageFile.readText().trim() else "idle"
+                    }.getOrDefault("unknown")
+
                     result.success(
                         mapOf(
                             "modelPresent" to present,
                             "voiceDir" to dir.absolutePath,
+                            "lastStage" to lastStage,
                             "engine" to "DreamPulseVoiceSafe",
                             "systemTts" to false,
                             "separateProcess" to true,
