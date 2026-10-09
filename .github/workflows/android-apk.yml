@@ -354,7 +354,7 @@ jobs:
           mkdir -p lib/voice
           cp patches/v014/lib/voice/dream_pulse_voice_backend.dart lib/voice/dream_pulse_voice_backend.dart
           python3 patches/v014/patch.py
-          grep -q "version: 0.14.0+31" pubspec.yaml
+          grep -q "version: 0.14.1+32" pubspec.yaml
           grep -q "SAFE Voice" lib/ui/assistant_page.dart
           grep -q "86494589" lib/voice/dream_pulse_voice_backend.dart
 
@@ -461,7 +461,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.14-safe-voice-separate-process-arm64-apk
+          name: dream-pulse-v0.14.1-safe-voice-diagnostics-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
