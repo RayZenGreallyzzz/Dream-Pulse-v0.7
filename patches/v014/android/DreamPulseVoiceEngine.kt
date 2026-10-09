@@ -30,7 +30,7 @@ import kotlin.math.roundToInt
  */
 class DreamPulseVoiceEngine(private val context: Context) {
     companion object {
-        private const val SAMPLE_RATE = 48000
+        private const val SAMPLE_RATE = 24000
         private const val MODEL_DIR = "silero"
         private const val SYMBOLS = "_~|!+,-.:;?абвгдежзийклмнопрстуфхцчшщъыьэюяё–… "
         private const val SOS = '|'
@@ -52,6 +52,18 @@ class DreamPulseVoiceEngine(private val context: Context) {
     private val threads = 2
 
     fun voiceDir(): File = File(context.filesDir, "dream-pulse-voice")
+    private fun stageFile(): File = File(voiceDir(), "last-stage.txt")
+
+    private fun mark(stage: String) {
+        runCatching {
+            voiceDir().mkdirs()
+            stageFile().writeText(stage)
+        }
+    }
+
+    fun lastStage(): String = runCatching {
+        if (stageFile().isFile) stageFile().readText().trim() else "idle"
+    }.getOrDefault("unknown")
 
     fun modelPresent(): Boolean {
         val dir = voiceDir()
@@ -132,15 +144,21 @@ class DreamPulseVoiceEngine(private val context: Context) {
 
         LitePyTorchAndroid.setNumThreads(threads)
         val dir = voiceDir()
+
+        mark("load_mel")
         mel = LiteModuleLoader.load(File(dir, "tts_mel.ptl").absolutePath)
+
+        mark("load_head")
         head = LiteModuleLoader.load(File(dir, "head.ptl").absolutePath)
 
+        mark("load_backbone")
         val backboneFile = File(dir, "backbone.pte")
         backbone = org.pytorch.executorch.Module.load(
             backboneFile.absolutePath,
             org.pytorch.executorch.Module.LOAD_MODE_MMAP,
             threads,
         )
+        mark("models_loaded")
     }
 
     private fun synthesize(
@@ -184,13 +202,18 @@ class DreamPulseVoiceEngine(private val context: Context) {
             IValue.optionalNull(),
         )
 
+        mark("mel_forward")
         val melOut = mel!!.forward(*args.toTypedArray()).toTuple()[0].toTensor()
+
+        mark("backbone_forward")
         val etInput = org.pytorch.executorch.Tensor.fromBlob(
             melOut.dataAsFloatArray,
             melOut.shape(),
         )
         val hidden = backbone!!.forward(EValue.from(etInput))[0].toTensor()
-        return head!!.forward(
+
+        mark("head_forward")
+        val audio = head!!.forward(
             IValue.from(
                 Tensor.fromBlob(
                     hidden.dataAsFloatArray,
@@ -201,6 +224,8 @@ class DreamPulseVoiceEngine(private val context: Context) {
             IValue.from(0.0),
             IValue.from(true),
         ).toTensor().dataAsFloatArray
+        mark("audio_ready")
+        return audio
     }
 
     private fun accent(text: String): String {
@@ -310,7 +335,7 @@ class DreamPulseVoiceEngine(private val context: Context) {
         val track = AudioTrack.Builder()
             .setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_ASSISTANT)
+                    .setUsage(AudioAttributes.USAGE_MEDIA)
                     .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
                     .build(),
             )
@@ -327,6 +352,7 @@ class DreamPulseVoiceEngine(private val context: Context) {
 
         currentTrack = track
         try {
+            mark("audio_play")
             track.play()
             var offset = 0
             while (offset < pcm.size && token == generation.get()) {
@@ -347,6 +373,7 @@ class DreamPulseVoiceEngine(private val context: Context) {
             ) {
                 Thread.sleep(12)
             }
+            mark("done")
         } finally {
             runCatching { track.stop() }
             runCatching { track.flush() }
