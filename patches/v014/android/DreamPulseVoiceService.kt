@@ -11,7 +11,30 @@ class DreamPulseVoiceService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        engine = DreamPulseVoiceEngine(applicationContext)
+        markStage("native_libcxx_load")
+        try {
+            // Dream Pulse packages Flutter/llama with a different libc++_shared.so.
+            // The isolated :voice process must preload the exact C++ runtime used
+            // to build RuVoice's PyTorch/ExecuTorch native libraries.
+            System.loadLibrary("voice_cxx")
+            markStage("native_libcxx_ok")
+            engine = DreamPulseVoiceEngine(applicationContext)
+            markStage("voice_engine_created")
+        } catch (t: Throwable) {
+            engine = null
+            markStage(
+                "native_libcxx_fail:" +
+                    (t.message ?: t.javaClass.simpleName).take(180)
+            )
+        }
+    }
+
+    private fun markStage(stage: String) {
+        runCatching {
+            val dir = java.io.File(filesDir, "dream-pulse-voice")
+            dir.mkdirs()
+            java.io.File(dir, "last-stage.txt").writeText(stage)
+        }
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
