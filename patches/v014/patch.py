@@ -3,7 +3,7 @@ from pathlib import Path
 p = Path('pubspec.yaml')
 s = p.read_text()
 s = '\n'.join(
-    'version: 0.14.1+32' if line.startswith('version:') else line
+    'version: 0.14.2+33' if line.startswith('version:') else line
     for line in s.splitlines()
 ) + '\n'
 p.write_text(s)
