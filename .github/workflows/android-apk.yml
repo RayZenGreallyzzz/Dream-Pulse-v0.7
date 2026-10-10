@@ -467,21 +467,14 @@ jobs:
         run: |
           unzip -p build/app/outputs/flutter-apk/app-release.apk lib/arm64-v8a/libvoice_cxx.so > /tmp/final-voice-cxx.so
           echo "af729ee868913bb298b7360939ba31865372222646edddcfa4ed9bca6484bf1c  /tmp/final-voice-cxx.so" | sha256sum -c -
-          unzip -Z1 build/app/outputs/flutter-apk/app-release.apk | grep -q '^lib/arm64-v8a/libvoice_cxx.so
-        uses: actions/upload-artifact@v4
-        with:
-          name: dream-pulse-v0.14.2-native-runtime-fix-arm64-apk
-          path: build/app/outputs/flutter-apk/app-release.apk
-          if-no-files-found: error
-          retention-days: 14
-
+          unzip -Z1 build/app/outputs/flutter-apk/app-release.apk | grep -q '^lib/arm64-v8a/libvoice_cxx.so$'
           grep -q 'System.loadLibrary("voice_cxx")' android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseVoiceService.kt
           grep -q 'android:process=":voice"' android/app/src/main/AndroidManifest.xml
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.14.1-safe-voice-final-diagnostics-arm64-apk
+          name: dream-pulse-v0.14.2-native-runtime-fix-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
