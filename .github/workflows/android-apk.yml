@@ -354,7 +354,7 @@ jobs:
           mkdir -p lib/voice
           cp patches/v014/lib/voice/dream_pulse_voice_backend.dart lib/voice/dream_pulse_voice_backend.dart
           python3 patches/v014/patch.py
-          grep -q "version: 0.14.1+32" pubspec.yaml
+          grep -q "version: 0.14.2+33" pubspec.yaml
           grep -q "SAFE Voice" lib/ui/assistant_page.dart
           grep -q "86494589" lib/voice/dream_pulse_voice_backend.dart
           grep -q "lastStage" lib/voice/dream_pulse_voice_backend.dart
@@ -434,6 +434,10 @@ jobs:
 
           curl -L --fail --retry 3             -o /tmp/ruvoice-full.apk             https://github.com/kost-t-human/ruvoice-tts/releases/download/v0.18.4/ruvoice-tts-0.18.4.apk
 
+          mkdir -p android/app/src/main/jniLibs/arm64-v8a
+          unzip -p /tmp/ruvoice-full.apk lib/arm64-v8a/libc++_shared.so             > android/app/src/main/jniLibs/arm64-v8a/libvoice_cxx.so
+          echo "af729ee868913bb298b7360939ba31865372222646edddcfa4ed9bca6484bf1c  android/app/src/main/jniLibs/arm64-v8a/libvoice_cxx.so" | sha256sum -c -
+          test -s android/app/src/main/jniLibs/arm64-v8a/libvoice_cxx.so
 
           curl -L --fail --retry 3             -o /tmp/executorch.aar             https://ossci-android.s3.amazonaws.com/executorch/release/1.5.0-xnnpack/executorch.aar
           rm -rf /tmp/executorch-aar
@@ -458,6 +462,21 @@ jobs:
 
       - name: Build ARM64 release APK
         run: flutter build apk --release --target-platform android-arm64
+
+      - name: Verify isolated voice native runtime in final APK
+        run: |
+          unzip -p build/app/outputs/flutter-apk/app-release.apk lib/arm64-v8a/libvoice_cxx.so > /tmp/final-voice-cxx.so
+          echo "af729ee868913bb298b7360939ba31865372222646edddcfa4ed9bca6484bf1c  /tmp/final-voice-cxx.so" | sha256sum -c -
+          unzip -Z1 build/app/outputs/flutter-apk/app-release.apk | grep -q '^lib/arm64-v8a/libvoice_cxx.so
+        uses: actions/upload-artifact@v4
+        with:
+          name: dream-pulse-v0.14.2-native-runtime-fix-arm64-apk
+          path: build/app/outputs/flutter-apk/app-release.apk
+          if-no-files-found: error
+          retention-days: 14
+
+          grep -q 'System.loadLibrary("voice_cxx")' android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseVoiceService.kt
+          grep -q 'android:process=":voice"' android/app/src/main/AndroidManifest.xml
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
