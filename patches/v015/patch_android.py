@@ -48,15 +48,14 @@ if (
     'com.github.k2-fsa.sherpa-onnx:'
     'sherpa-onnx:' not in g
 ):
-    if 'dependencies {' not in g:
-        raise SystemExit(
-            'app dependencies block not found'
+    if 'dependencies {' in g:
+        g = g.replace(
+            'dependencies {\n',
+            'dependencies {\n' + dep,
+            1,
         )
-    g = g.replace(
-        'dependencies {\n',
-        'dependencies {\n' + dep,
-        1,
-    )
+    else:
+        g = g.rstrip() + '\n\ndependencies {\n' + dep + '}\n'
 gradle.write_text(g)
 
 build = Path('android/build.gradle.kts')
