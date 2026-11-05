@@ -123,11 +123,12 @@ def main():
     once(page,
         """                      'Мои женские голоса · исходные записи для обучения',""",
         """                      'Четыре самостоятельных авторских голоса',""")
-    once(page,
-        """                      'Модель: Piper Irina · sherpa-onnx · PCM 16-bit. '
-                      'Dream · Zoey-style — наш профиль звучания.',""",
-        """                      'Dream Pulse TTS · Silero v5_5_ru · подготовка '
-                      'собственных женских голосов. Синтез пока недоступен.',""")
+    # Old narrative labels vary between patch versions; strip them if present.
+    p=Path(page)
+    ui=p.read_text(encoding="utf-8")
+    ui=ui.replace("Модель: Piper Irina · sherpa-onnx · PCM 16-bit.", "Dream Pulse TTS · Silero v5_5_ru (подготовка).")
+    ui=ui.replace("Dream · Zoey-style — наш профиль звучания.", "Голосовые модели пока не обучены.")
+    p.write_text(ui,encoding="utf-8")
     # Do not pretend that pressing test produced audio when TTS is absent.
     once(page,
         """            } catch (_) {
