@@ -219,7 +219,7 @@ def main():
       listenFor: const Duration(seconds: 30),
       pauseFor: const Duration(seconds: 3),
       partialResults: true,""",
-        """      listenOptions: const stt.SpeechListenOptions(
+        """      listenOptions: stt.SpeechListenOptions(
         localeId: 'ru_RU',
         listenFor: Duration(seconds: 30),
         pauseFor: Duration(seconds: 3),
@@ -245,11 +245,20 @@ def main():
 
     world = Path("lib/ui/world_painter.dart")
     world_lines = world.read_text(encoding="utf-8").splitlines()
-    world_lines = [
-        line for line in world_lines
-        if not ("final byId = " in line and line.strip().endswith(";"))
-    ]
-    world.write_text("\n".join(world_lines) + "\n", encoding="utf-8")
+    # Analyzer confirms byId is unused. The initializer may span
+    # multiple lines; remove through the terminating semicolon.
+    cleaned = []
+    dropping = False
+    for line in world_lines:
+        if not dropping and "final byId =" in line:
+            dropping = not line.strip().endswith(";")
+            continue
+        if dropping:
+            if line.strip().endswith(";"):
+                dropping = False
+            continue
+        cleaned.append(line)
+    world.write_text("\n".join(cleaned) + "\n", encoding="utf-8")
 
     # Stage files were copied into app/test, so only the usual generated test
     # imports need to be lint-suppressed in older base archive layouts.
