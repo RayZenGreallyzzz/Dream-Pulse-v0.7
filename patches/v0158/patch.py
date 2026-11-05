@@ -123,6 +123,11 @@ def main():
     once(page,
         """                      'Мои женские голоса · исходные записи для обучения',""",
         """                      'Четыре самостоятельных авторских голоса',""")
+    once(page,
+        """                      'Модель: Piper Irina · sherpa-onnx · PCM 16-bit. '
+                      'Dream · Zoey-style — наш профиль звучания.',""",
+        """                      'Dream Pulse TTS · Silero v5_5_ru · подготовка '
+                      'собственных женских голосов. Синтез пока недоступен.',""")
     # Do not pretend that pressing test produced audio when TTS is absent.
     once(page,
         """            } catch (_) {
