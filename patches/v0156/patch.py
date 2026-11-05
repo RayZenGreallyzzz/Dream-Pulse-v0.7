@@ -38,4 +38,23 @@ once(
         '${e.message ?? e.code} · этап: $stage · процесс: $exit',
       );""",
 )
+once(
+    """  Future<void> stop() async {
+    speaking = false;
+    try {
+      await _channel.invokeMethod<void>('stop');
+    } catch (_) {}
+  }""",
+    """  Future<void> stop() async {
+    // SpeechController calls stop() before EVERY utterance. Starting a
+    // service only to stop an idle engine unnecessarily churned the
+    // isolated :voice process and could race with the next SPEAK intent.
+    final wasSpeaking = speaking;
+    speaking = false;
+    if (!wasSpeaking) return;
+    try {
+      await _channel.invokeMethod<void>('stop');
+    } catch (_) {}
+  }""",
+)
 p.write_text(raw, encoding="utf-8")
