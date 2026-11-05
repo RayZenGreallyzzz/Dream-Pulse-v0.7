@@ -94,7 +94,8 @@ class ConservativeEvidenceGate extends EvidenceGate {
   // Group common subdomains; imperfect for the whole public suffix list,
   // but prevents counting foo.example.com and bar.example.com separately.
   String _domain(String host) {
-    final clean = host.toLowerCase().replaceFirst(RegExp(r'^www\\.'), '');
+    final lower = host.toLowerCase();
+    final clean = lower.startsWith('www.') ? lower.substring(4) : lower;
     if (clean.isEmpty || clean == 'localhost') return '';
     final parts = clean.split('.');
     if (parts.length < 2 || parts.any((part) => part.isEmpty)) return '';
