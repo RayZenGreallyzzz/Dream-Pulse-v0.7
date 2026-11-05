@@ -5,7 +5,7 @@ on:
   pull_request:
     branches: [ main ]
   push:
-    branches: [ main, feat/dream-pulse-native-tts-v0158 ]
+    branches: [ main, feat/silero-torchscript-lite-first-speech-v0159 ]
     paths:
       - 'ci/v08m.part.*'
       - 'patches/v08/**'
@@ -37,6 +37,7 @@ on:
       - 'patches/v0155/**'
       - 'patches/v0156/**'
       - 'patches/v0158/**'
+      - 'patches/v0159/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -434,6 +435,14 @@ jobs:
           ! grep -q 'dream_pulse/voice' lib/voice/dream_pulse_voice_backend.dart
           test -f test/voice_catalog_test.dart
 
+      - name: Apply v0.15.9 full Silero Lite reference preview
+        run: |
+          python3 patches/v0159/patch.py
+          python3 patches/v0159/tools/test_export_full_lite.py
+          grep -q 'version: 0.15.9+43' pubspec.yaml
+          grep -q 'previewBaseReference' lib/voice/dream_pulse_voice_backend.dart
+          grep -q 'previewSileroBaseTest' lib/avatar/speech_controller.dart
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -560,6 +569,15 @@ jobs:
           test ! -f android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseVoiceEngine.kt
           rm -rf patches/v0158
 
+      - name: Install isolated full TorchScript Lite Silero Android runtime
+        run: |
+          python3 patches/v0159/patch_android.py
+          grep -q 'org.pytorch:pytorch_android_lite:2.1.0' android/app/build.gradle.kts
+          grep -q 'DreamPulseSileroPreviewService' android/app/src/main/AndroidManifest.xml
+          grep -q 'previewBase' android/app/src/main/kotlin/com/dreampulse/assistant/MainActivity.kt
+          test -f android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseSileroLiteSynth.kt
+          rm -rf patches/v0159
+
       - name: Flutter analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
@@ -587,7 +605,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.15.8-new-native-tts-no-piper-arm64-apk
+          name: dream-pulse-v0.15.9-silero-torchscript-lite-test-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
