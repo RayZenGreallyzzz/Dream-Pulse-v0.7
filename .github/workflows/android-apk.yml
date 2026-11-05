@@ -2,8 +2,10 @@ name: Build Android APK
 
 on:
   workflow_dispatch:
-  push:
+  pull_request:
     branches: [ main ]
+  push:
+    branches: [ main, fix/irina-voice-crash-v0156 ]
     paths:
       - 'ci/v08m.part.*'
       - 'patches/v08/**'
@@ -30,6 +32,10 @@ on:
       - 'patches/v015/**'
       - 'patches/v0151/**'
       - 'patches/v0152/**'
+      - 'patches/v0153/**'
+      - 'patches/v0154/**'
+      - 'patches/v0155/**'
+      - 'patches/v0156/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -385,6 +391,39 @@ jobs:
           grep -q "diagnoseLocalVoice" lib/avatar/speech_controller.dart
           grep -q "Диагностика · сигнал + модель + TTS" lib/ui/assistant_page.dart
 
+      - name: Apply v0.15.3 Android Core hardening
+        run: |
+          python3 patches/v0153/patch.py
+          grep -q "version: 0.15.3+37" pubspec.yaml
+          grep -q "evidenceGate.assess" lib/core/pulse_coordinator.dart
+          grep -q "await db.transaction" lib/storage/memory_store.dart
+          grep -q "CORE_BUSY" lib/core/pulse_coordinator.dart
+          grep -q "ConservativeEvidenceGate" lib/core/evidence_gate.dart
+          rm -rf patches/v0153
+
+      - name: Apply v0.15.4 voice foundation and analyzer cleanup
+        run: |
+          python3 patches/v0154/patch.py
+          grep -q "version: 0.15.4+38" pubspec.yaml
+          grep -q "RuVoiceSileroBridge" lib/avatar/speech_controller.dart
+          grep -q "flutter_tts" pubspec.yaml
+          test -f lib/voice/dream_voice_catalog.dart
+
+      - name: Apply v0.15.5 female-only voice contract
+        run: |
+          python3 patches/v0155/patch.py
+          python3 patches/v0155/tools/test_build_female_base_pack.py
+          grep -q "version: 0.15.5+39" pubspec.yaml
+          grep -q "DreamSileroEmbeddedSpec" lib/voice/dream_voice_catalog.dart
+          test ! -f lib/voice/ruvoice_silero_bridge.dart
+          ! grep -q 'flutter_tts:' pubspec.yaml
+
+      - name: Apply v0.15.6 Irina voice crash diagnostics
+        run: |
+          python3 patches/v0156/patch.py
+          grep -q 'version: 0.15.6+40' pubspec.yaml
+          grep -q "voiceExit" lib/voice/dream_pulse_voice_backend.dart
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -482,8 +521,33 @@ jobs:
           grep -q '"diagnose"' android/app/src/main/kotlin/com/dreampulse/assistant/MainActivity.kt
           rm -rf patches/v0152
 
+      - name: Enable RuVoice engine discovery on Android
+        run: |
+          python3 patches/v0154/patch_android.py
+          grep -q 'android.intent.action.TTS_SERVICE' android/app/src/main/AndroidManifest.xml
+          rm -rf patches/v0154
+
+      - name: Remove external RuVoice discovery
+        run: |
+          python3 patches/v0155/patch_android.py
+          rm -rf patches/v0155
+
+      - name: Harden isolated Irina voice Android runtime
+        run: |
+          python3 patches/v0156/patch_android.py
+          grep -q 'private val audioLock' android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseVoiceEngine.kt
+          grep -q 'ACTION_STOP' android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseVoiceService.kt
+          grep -q 'lastVoiceExit' android/app/src/main/kotlin/com/dreampulse/assistant/MainActivity.kt
+          rm -rf patches/v0156
+
       - name: Flutter analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Core regression tests
+        run: flutter test test/core_hardening_test.dart
+
+      - name: Voice catalogue regression tests
+        run: flutter test test/voice_catalog_test.dart
 
       - name: Build ARM64 release APK
         run: flutter build apk --release --target-platform android-arm64
@@ -508,7 +572,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.15.2-pcm16-diagnostics-arm64-apk
+          name: dream-pulse-v0.15.6-irina-crash-guard-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
