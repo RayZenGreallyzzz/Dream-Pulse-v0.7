@@ -5,7 +5,7 @@ on:
   pull_request:
     branches: [ main ]
   push:
-    branches: [ main, fix/irina-voice-crash-v0156 ]
+    branches: [ main, feat/dream-pulse-native-tts-v0158 ]
     paths:
       - 'ci/v08m.part.*'
       - 'patches/v08/**'
@@ -36,6 +36,7 @@ on:
       - 'patches/v0154/**'
       - 'patches/v0155/**'
       - 'patches/v0156/**'
+      - 'patches/v0158/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -424,6 +425,15 @@ jobs:
           grep -q 'version: 0.15.6+40' pubspec.yaml
           grep -q "voiceExit" lib/voice/dream_pulse_voice_backend.dart
 
+      - name: Apply v0.15.8 Dream Pulse own TTS interface
+        run: |
+          python3 patches/v0158/patch.py
+          grep -q 'version: 0.15.8+42' pubspec.yaml
+          grep -q "Dream Pulse TTS" lib/voice/dream_pulse_voice_backend.dart
+          ! grep -q 'vits-piper-ru_RU-irina-medium' lib/voice/dream_pulse_voice_backend.dart
+          ! grep -q 'dream_pulse/voice' lib/voice/dream_pulse_voice_backend.dart
+          test -f test/voice_catalog_test.dart
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -540,6 +550,16 @@ jobs:
           grep -q 'lastVoiceExit' android/app/src/main/kotlin/com/dreampulse/assistant/MainActivity.kt
           rm -rf patches/v0156
 
+      - name: Remove Piper and enable Dream Pulse local pack management
+        run: |
+          python3 patches/v0158/patch_android.py
+          grep -q 'dream_pulse/tts' android/app/src/main/kotlin/com/dreampulse/assistant/MainActivity.kt
+          grep -q 'class DreamPulseSileroPackStore' android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseSileroPackStore.kt
+          ! grep -q 'sherpa-onnx' android/app/build.gradle.kts
+          ! grep -q 'DreamPulseVoiceService' android/app/src/main/AndroidManifest.xml
+          test ! -f android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseVoiceEngine.kt
+          rm -rf patches/v0158
+
       - name: Flutter analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
@@ -552,27 +572,22 @@ jobs:
       - name: Build ARM64 release APK
         run: flutter build apk --release --target-platform android-arm64
 
-      - name: Verify v0.15.2 voice runtime in final APK
+      - name: Verify Piper removed from Dream Pulse APK
         run: |
           set -euo pipefail
           APK=build/app/outputs/flutter-apk/app-release.apk
-          unzip -Z1 "$APK" | grep -q '^lib/arm64-v8a/libsherpa-onnx-jni.so$'
-          unzip -Z1 "$APK" | grep -q '^lib/arm64-v8a/libonnxruntime.so$'
-          ! unzip -Z1 "$APK" | grep -q 'libexecutorch.so'
-          ! unzip -Z1 "$APK" | grep -q 'libpytorch'
-          ! unzip -Z1 "$APK" | grep -q 'libvoice_cxx.so'
-          grep -q 'DreamPulseVoiceCore' android/app/src/main/kotlin/com/dreampulse/assistant/MainActivity.kt
-          grep -q 'OfflineTts' android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseVoiceEngine.kt
-          grep -q 'generateWithConfigAndCallback' android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseVoiceEngine.kt
-          grep -q 'ENCODING_PCM_16BIT' android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseVoiceEngine.kt
-          grep -q 'ACTION_DIAGNOSE' android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseVoiceService.kt
-          ! grep -q 'killProcess' android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseVoiceService.kt
+          test -s "$APK"
+          ! unzip -Z1 "$APK" | grep -q '^lib/arm64-v8a/libsherpa-onnx-jni.so$'
+          ! grep -q 'sherpa-onnx' android/app/build.gradle.kts
+          ! grep -q 'DreamPulseVoiceService' android/app/src/main/AndroidManifest.xml
+          grep -q 'dream_pulse/tts' android/app/src/main/kotlin/com/dreampulse/assistant/MainActivity.kt
+          grep -q 'class DreamPulseSileroPackStore' android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseSileroPackStore.kt
           ls -lh "$APK"
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.15.6-irina-crash-guard-arm64-apk
+          name: dream-pulse-v0.15.8-new-native-tts-no-piper-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
