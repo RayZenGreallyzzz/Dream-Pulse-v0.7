@@ -82,15 +82,13 @@ def main():
         """          Future<void> chooseVoice(VoiceOption voice) async {""",
         """          Future<void> importTtsPack() async {
             try {
-              final picked = await FilePicker.platform.pickFiles(
-                type: FileType.custom,
-                allowedExtensions: ['zip'],
-                withData: false,
-              );
-              if (picked == null) return;
-              final filePath = picked.files.single.path;
-              if (filePath == null || filePath.isEmpty) {
-                throw StateError('Архив ZIP недоступен Android');
+              // Use the app's existing FilePicker API (returns a list).
+              final picked = await FilePicker.pickFiles(type: FileType.any);
+              if (picked.isEmpty) return;
+              final filePath = picked.first.path;
+              if (filePath == null ||
+                  !filePath.toLowerCase().endsWith('.zip')) {
+                throw StateError('Выбери доступный ZIP-пакет Silero');
               }
               final message =
                   await widget.speech.importDreamPulseTtsPack(filePath);
