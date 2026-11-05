@@ -119,5 +119,22 @@ def main():
                       ),
                     ),""")
 
+    tests=Path("test/voice_catalog_test.dart")
+    existing=tests.read_text(encoding="utf-8")
+    extra="""  test('Silero baseline cannot impersonate an untrained voice', () async {
+    final backend = DreamPulseVoiceBackend();
+    expect(backend.basePreviewReady, isFalse);
+    await expectLater(
+      backend.previewBaseReference(),
+      throwsA(isA<StateError>()),
+    );
+  });
+
+"""
+    end=existing.rfind("}\n")
+    if end<0:
+        raise RuntimeError("Flutter voice test suite has changed")
+    tests.write_text(existing[:end]+extra+existing[end:],encoding="utf-8")
+
 if __name__=="__main__":
     main()
