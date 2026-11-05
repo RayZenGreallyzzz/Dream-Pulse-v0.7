@@ -243,6 +243,14 @@ def main():
         s = s.replace(".withOpacity(", ".withValues(alpha: ")
         p.write_text(s, encoding="utf-8")
 
+    world = Path("lib/ui/world_painter.dart")
+    world_lines = world.read_text(encoding="utf-8").splitlines()
+    world_lines = [
+        line for line in world_lines
+        if not ("final byId = " in line and line.strip().endswith(";"))
+    ]
+    world.write_text("\\n".join(world_lines) + "\\n", encoding="utf-8")
+
     # Stage files were copied into app/test, so only the usual generated test
     # imports need to be lint-suppressed in older base archive layouts.
     t = Path("test/core_hardening_test.dart")
