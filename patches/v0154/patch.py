@@ -252,20 +252,6 @@ def main():
             src = "// ignore_for_file: avoid_relative_lib_imports\n\n" + src
             t.write_text(src, encoding="utf-8")
 
-    # System voice engine visibility for Android 11+. The Silero bridge
-    # does not add its own Android service to Dream Pulse.
-    manifest = Path("android/app/src/main/AndroidManifest.xml")
-    text = manifest.read_text(encoding="utf-8")
-    if "android.intent.action.TTS_SERVICE" not in text:
-        tts_query = (
-            "    <queries>\n"
-            "        <intent>\n"
-            '            <action android:name="android.intent.action.TTS_SERVICE" />\n'
-            "        </intent>\n"
-            "    </queries>\n"
-        )
-        text = text.replace("    <application", tts_query + "    <application", 1)
-    manifest.write_text(text, encoding="utf-8")
 
 
 if __name__ == "__main__":
