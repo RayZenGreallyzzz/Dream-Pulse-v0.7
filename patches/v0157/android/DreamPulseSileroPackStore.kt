@@ -79,12 +79,12 @@ class DreamPulseSileroPackStore(private val context: Context) {
                     val entry = entries.nextElement()
                     if (entry.isDirectory) {
                         require(entry.name == "silero/") {
-                            "Unexpected directory in Silero pack: \${entry.name}"
+                            "Unexpected directory in Silero pack: ${entry.name}"
                         }
                         continue
                     }
                     require(entry.name in expectedEntries && found.add(entry.name)) {
-                        "Unexpected or duplicate Silero file: \${entry.name}"
+                        "Unexpected or duplicate Silero file: ${entry.name}"
                     }
                 }
                 require(found == expectedEntries) { "Silero ZIP is missing model files" }
@@ -93,13 +93,19 @@ class DreamPulseSileroPackStore(private val context: Context) {
                     ?: throw IllegalArgumentException("Missing Silero manifest")
                 val manifestBytes = zip.getInputStream(manifestEntry).use { input ->
                     // Never read an unbounded manifest into Android RAM.
-                    val bytes = ByteArray(65_537)
-                    val count = input.read(bytes)
-                    require(count in 1..65_536 && input.read() == -1) {
-                        "Silero manifest exceeds 64 KB"
+                    val output = java.io.ByteArrayOutputStream()
+                    val buffer = ByteArray(4096)
+                    while (true) {
+                        val n = input.read(buffer)
+                        if (n < 0) break
+                        require(output.size() + n <= 65_536) {
+                            "Silero manifest exceeds 64 KB"
+                        }
+                        output.write(buffer, 0, n)
                     }
-                    bytes.copyOf(count)
+                    output.toByteArray()
                 }
+                require(manifestBytes.isNotEmpty()) { "Empty Silero manifest" }
                 val manifestText = manifestBytes.toString(Charsets.UTF_8)
                 val json = JSONObject(manifestText)
                 require(json.getString("format") == FORMAT)
