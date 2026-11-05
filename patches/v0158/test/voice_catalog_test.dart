@@ -32,7 +32,7 @@ void main() {
     await backend.speak('Привет, Dream Pulse.');
     expect(backend.ready, isFalse);
     expect(backend.status, contains('синтез ещё не подключён'));
-    expect(() => backend.install(), throwsA(isA<StateError>()));
+    await expectLater(backend.install(), throwsA(isA<StateError>()));
   });
 
   test('Silero base file contract has six modules and original license', () {
