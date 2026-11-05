@@ -87,6 +87,5 @@ class RuVoiceSileroBridge {
 
   Future<void> dispose() async {
     await stop();
-    await _tts.shutdown();
   }
 }
