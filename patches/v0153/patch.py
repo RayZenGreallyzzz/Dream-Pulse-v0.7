@@ -33,12 +33,14 @@ def main() -> None:
     replace_once(c,
         "  final ToolRegistry tools;\n",
         "  final ToolRegistry tools;\n  final EvidenceGate evidenceGate;\n")
+    # Guard immediately before state mutations, after the earlier
+    # asynchronous personality save, to close the concurrent-start race.
     replace_once(c,
-        "    if (cleanPrompt.isEmpty) return;\n",
-        "    if (cleanPrompt.isEmpty) return;\n"
+        "    final domain = _classifyDomain(\n",
         "    if (engine.running) {\n"
         "      throw StateError('CORE_BUSY: wait for the previous task to finish');\n"
-        "    }\n")
+        "    }\n"
+        "    final domain = _classifyDomain(\n")
     replace_once(c,
         """      final distinctHosts =
           sources.map((e) => e.host).where((e) => e.isNotEmpty).toSet().length;
