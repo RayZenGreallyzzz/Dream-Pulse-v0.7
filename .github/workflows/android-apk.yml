@@ -3,9 +3,9 @@ name: Build Android APK
 on:
   workflow_dispatch:
   pull_request:
-    branches: [ main ]
+    branches: [ main, feat/voice-training-lab-v0161 ]
   push:
-    branches: [ main, fix/tts-install-voice-ui-v0160 ]
+    branches: [ main, feat/trained-voice-style-weights-v0162 ]
     paths:
       - 'ci/v08m.part.*'
       - 'patches/v08/**'
@@ -39,6 +39,7 @@ on:
       - 'patches/v0158/**'
       - 'patches/v0159/**'
       - 'patches/v0160/**'
+      - 'patches/v0162/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -453,6 +454,14 @@ jobs:
           ! grep -q 'Установить Dream Voice · Zoey-style' lib/ui/assistant_page.dart
           ! grep -q 'onPressed: widget.speech.localVoiceInstalling' lib/ui/assistant_page.dart
 
+      - name: Install four fitted author voice weights
+        run: |
+          python3 patches/v0162/patch.py
+          grep -q 'version: 0.16.2+46' pubspec.yaml
+          grep -q 'previewSelectedTimbre' lib/voice/dream_pulse_voice_backend.dart
+          grep -q 'Прослушать обученный тембр' lib/ui/assistant_page.dart
+          python3 -m unittest discover -s patches/v0162/tools -p 'test_*.py' -v
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -591,6 +600,15 @@ jobs:
       - name: Remove TTS installer patch sources before Flutter analysis
         run: rm -rf patches/v0160
 
+      - name: Embed trained voice timbres in Android playback
+        run: |
+          python3 patches/v0162/patch_android.py
+          grep -q 'previewStyle' android/app/src/main/kotlin/com/dreampulse/assistant/MainActivity.kt
+          grep -q 'DreamPulseTrainedTimbre' android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseSileroLiteSynth.kt
+          test -f android/app/src/main/assets/dream_pulse_tts/styles/dream_ref_hello.json
+          test -f android/app/src/main/assets/dream_pulse_tts/styles/dream_ref_long.json
+          rm -rf patches/v0162
+
       - name: Flutter analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
@@ -618,7 +636,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.16.0-voice-import-ui-fix-arm64-apk
+          name: dream-pulse-v0.16.2-trained-female-timbre-weights-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
