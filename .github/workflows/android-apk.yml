@@ -3,7 +3,7 @@ name: Build Android APK
 on:
   workflow_dispatch:
   pull_request:
-    branches: [ main ]
+    branches: [ main, feat/voice-training-lab-v0161 ]
   push:
     branches: [ main, feat/trained-voice-style-weights-v0162 ]
     paths:
