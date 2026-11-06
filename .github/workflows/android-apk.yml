@@ -5,7 +5,7 @@ on:
   pull_request:
     branches: [ main ]
   push:
-    branches: [ main, feat/silero-torchscript-lite-first-speech-v0159 ]
+    branches: [ main, fix/tts-install-voice-ui-v0160 ]
     paths:
       - 'ci/v08m.part.*'
       - 'patches/v08/**'
@@ -38,6 +38,7 @@ on:
       - 'patches/v0156/**'
       - 'patches/v0158/**'
       - 'patches/v0159/**'
+      - 'patches/v0160/**'
       - '.github/workflows/android-apk.yml'
       - 'README.md'
 
@@ -443,6 +444,15 @@ jobs:
           grep -q 'previewBaseReference' lib/voice/dream_pulse_voice_backend.dart
           grep -q 'previewSileroBaseTest' lib/avatar/speech_controller.dart
 
+      - name: Apply v0.16.0 voice install and feedback fix
+        run: |
+          python3 patches/v0160/patch.py
+          grep -q 'version: 0.16.0+44' pubspec.yaml
+          grep -q 'dream-pulse-voice-notice' lib/ui/assistant_page.dart
+          grep -q 'Импортировать веса Dream Pulse TTS' lib/ui/assistant_page.dart
+          ! grep -q 'Установить Dream Voice · Zoey-style' lib/ui/assistant_page.dart
+          ! grep -q 'onPressed: widget.speech.localVoiceInstalling' lib/ui/assistant_page.dart
+
       - name: Set up Java 17
         uses: actions/setup-java@v4
         with:
@@ -578,6 +588,9 @@ jobs:
           test -f android/app/src/main/kotlin/com/dreampulse/assistant/DreamPulseSileroLiteSynth.kt
           rm -rf patches/v0159
 
+      - name: Remove TTS installer patch sources before Flutter analysis
+        run: rm -rf patches/v0160
+
       - name: Flutter analyze
         run: flutter analyze --no-fatal-infos --no-fatal-warnings
 
@@ -605,7 +618,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: dream-pulse-v0.15.9-silero-torchscript-lite-test-arm64-apk
+          name: dream-pulse-v0.16.0-voice-import-ui-fix-arm64-apk
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
