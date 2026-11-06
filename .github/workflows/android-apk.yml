@@ -622,3 +622,85 @@ jobs:
           path: build/app/outputs/flutter-apk/app-release.apk
           if-no-files-found: error
           retention-days: 14
+
+  export-reference-pack:
+    name: Convert original v5_5_ru to installable Dream Pulse model ZIP
+    if: github.ref == 'refs/heads/fix/tts-install-voice-ui-v0160'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install CPU PyTorch for reference export
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+          python -c "import torch; print('Export Torch:', torch.__version__)"
+
+      - name: Download original Silero model (noncommercial license)
+        run: |
+          mkdir -p ${RUNNER_TEMP}/silero-src
+          curl --fail --location --retry 4 --retry-delay 5 \
+            --connect-timeout 30 --max-time 900 \
+            'https://models.silero.ai/models/tts/ru/v5_5_ru.pt' \
+            --output "${RUNNER_TEMP}/silero-src/v5_5_ru.pt"
+          test -s "${RUNNER_TEMP}/silero-src/v5_5_ru.pt"
+          sha256sum "${RUNNER_TEMP}/silero-src/v5_5_ru.pt"
+
+      - name: Convert and numerically verify model
+        run: |
+          mkdir -p "${RUNNER_TEMP}/silero-out"
+          python patches/v0159/tools/export_full_lite.py \
+            --source-model "${RUNNER_TEMP}/silero-src/v5_5_ru.pt" \
+            --output "${RUNNER_TEMP}/silero-out/dream-pulse-silero-full-lite.zip"
+          test -s "${RUNNER_TEMP}/silero-out/dream-pulse-silero-full-lite.zip"
+
+      - name: Include license and installation instructions
+        run: |
+          cat > "${RUNNER_TEMP}/silero-out/README.txt" <<'TEXT'
+          Dream Pulse TTS · original Silero v5_5_ru
+          =========================================
+          This ZIP contains converted ORIGINAL model weights.
+          It is a technical test pack for the Baya source speaker.
+          It is NOT the trained Irina voice or the four author-created voices.
+
+          License: CC BY-NC-SA 4.0 (noncommercial, attribution, share-alike).
+          Source: https://github.com/snakers4/silero-models
+          Original weights: https://models.silero.ai/models/tts/ru/v5_5_ru.pt
+          License text: https://creativecommons.org/licenses/by-nc-sa/4.0/legalcode
+
+          In Dream Pulse v0.16.0:
+          Voice settings > Import Dream Pulse TTS weights > select
+          dream-pulse-silero-full-lite.zip > Technical Silero test.
+          TEXT
+
+      - name: Validate ZIP integrity and manifest
+        run: |
+          python - <<'PY'
+          import json, os, zipfile
+          path = os.environ['RUNNER_TEMP'] + '/silero-out/dream-pulse-silero-full-lite.zip'
+          with zipfile.ZipFile(path) as z:
+              assert z.testzip() is None
+              names = set(z.namelist())
+              assert names == {'silero/model.ptl', 'silero/symbols.json', 'silero/manifest.json'}
+              manifest = json.loads(z.read('silero/manifest.json'))
+              assert manifest['model_id'] == 'v5_5_ru'
+              assert manifest['license'] == 'CC BY-NC-SA 4.0'
+              assert manifest['silero_backend_test_only'] is True
+              assert manifest['trained_user_voices'] == []
+              print('Verified ZIP:', os.path.getsize(path), 'bytes')
+          PY
+
+      - name: Upload developer-only Silero reference pack
+        uses: actions/upload-artifact@v4
+        with:
+          name: dream-pulse-silero-full-lite-reference-weights
+          path: ${{ runner.temp }}/silero-out/
+          if-no-files-found: error
+          retention-days: 7
