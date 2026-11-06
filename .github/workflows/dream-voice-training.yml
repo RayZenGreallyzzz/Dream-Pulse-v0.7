@@ -1,0 +1,41 @@
+name: Dream Pulse private voice training code tests
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'patches/v0161/**'
+      - '.github/workflows/dream-voice-training.yml'
+  push:
+    branches: [ feat/voice-training-lab-v0161 ]
+    paths:
+      - 'patches/v0161/**'
+      - '.github/workflows/dream-voice-training.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  train-code-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install CPU PyTorch and lightweight acoustic analysis
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install torch==2.5.1 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install "numpy<3" scipy soundfile
+      - name: Check no private voice recordings or trained adapters were committed
+        run: |
+          test -z "$(find patches/v0161 -type f \
+            \( -iname '*.wav' -o -iname '*.flac' -o -iname '*.pt' \
+            -o -iname '*.ptl' -o -iname '*.onnx' -o -name 'adapter.json' \) -print)"
+      - name: Run synthetic training regression suite
+        run: |
+          python -m unittest discover \
+            -s patches/v0161/tools -p 'test_*.py' -v
