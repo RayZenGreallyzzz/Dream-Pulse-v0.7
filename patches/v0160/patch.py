@@ -17,10 +17,10 @@ def exactly_once(file: Path, old: str, new: str):
 
 def replace_between(file: Path, start: str, end: str, replacement: str):
     s = file.read_text(encoding="utf-8")
-    if s.count(start) != 1 or s.count(end) != 1:
+    if s.count(start) != 1:
         raise RuntimeError(f"{file}: unexpected modal layout for {start[:60]!r}")
     a = s.index(start)
-    b = s.index(end, a + len(start))
+    b = s.find(end, a + len(start))
     if b <= a:
         raise RuntimeError(f"{file}: modal block out of order")
     file.write_text(s[:a] + replacement + s[b:], encoding="utf-8")
